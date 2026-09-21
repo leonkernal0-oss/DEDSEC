@@ -41,12 +41,16 @@ function saveDevices(devices: Device[]) {
 }
 
 function App() {
+  console.log('App component rendering...');
+  
   const [devices, setDevices] = useState<Device[]>(loadDevices());
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  
+  console.log('App state initialized:', { devices: devices.length, viewMode });
 
   // Save devices whenever they change
   useEffect(() => {
