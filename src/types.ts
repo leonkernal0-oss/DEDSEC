@@ -2,6 +2,7 @@ export interface DeviceLocation {
   lat: number;
   lng: number;
   city: string;
+  country: string;
 }
 
 export interface Device {
@@ -9,6 +10,7 @@ export interface Device {
   name: string;
   hostname: string;
   ip: string;
+  publicIp: string;
   os: string;
   status: 'online' | 'offline' | 'connecting';
   location: DeviceLocation;
@@ -18,6 +20,10 @@ export interface Device {
   lastSeen: string;
   cpu: number;
   ram: number;
+  disk: number;
+  uptime: string;
+  tunnelUrl?: string;
 }
 
-export type ViewMode = 'map' | 'vnc' | 'terminal';
+export type ViewMode = 'dashboard' | 'vnc' | 'terminal' | 'files' | 'map';
+export type PanelMode = 'overview' | 'vnc' | 'terminal' | 'files';
