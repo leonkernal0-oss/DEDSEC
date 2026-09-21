@@ -18,9 +18,10 @@ interface DashboardViewProps {
   selectedDevice: Device | null;
   onSelectDevice: (device: Device) => void;
   onAction: (device: Device, action: ViewMode) => void;
+  onDeleteDevice: (deviceId: string) => void;
 }
 
-export function DashboardView({ devices, selectedDevice, onSelectDevice, onAction }: DashboardViewProps) {
+export function DashboardView({ devices, selectedDevice, onSelectDevice, onAction, onDeleteDevice }: DashboardViewProps) {
   const onlineDevices = devices.filter(d => d.status === 'online');
   const offlineDevices = devices.filter(d => d.status !== 'online');
 
@@ -78,6 +79,7 @@ export function DashboardView({ devices, selectedDevice, onSelectDevice, onActio
                 isSelected={selectedDevice?.id === device.id}
                 onSelect={() => onSelectDevice(device)}
                 onAction={(action) => onAction(device, action)}
+                onDelete={() => onDeleteDevice(device.id)}
               />
             ))}
           </div>
@@ -101,6 +103,7 @@ export function DashboardView({ devices, selectedDevice, onSelectDevice, onActio
                 isSelected={selectedDevice?.id === device.id}
                 onSelect={() => onSelectDevice(device)}
                 onAction={(action) => onAction(device, action)}
+                onDelete={() => onDeleteDevice(device.id)}
               />
             ))}
           </div>
@@ -134,11 +137,12 @@ function StatCard({ icon, label, value, color }: {
   );
 }
 
-function DeviceCard({ device, isSelected, onSelect, onAction }: {
+function DeviceCard({ device, isSelected, onSelect, onAction, onDelete }: {
   device: Device;
   isSelected: boolean;
   onSelect: () => void;
   onAction: (action: ViewMode) => void;
+  onDelete: () => void;
 }) {
   const isOnline = device.status === 'online';
 
@@ -229,6 +233,13 @@ function DeviceCard({ device, isSelected, onSelect, onAction }: {
             disabled={!isOnline}
             color="purple"
           />
+          <button
+            onClick={(e) => { e.stopPropagation(); if (confirm('Remove this device?')) onDelete(); }}
+            className="p-1.5 rounded-lg text-slate-500 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+            title="Remove device"
+          >
+            <i className="fa-solid fa-trash text-xs" />
+          </button>
         </div>
       </div>
     </div>

@@ -21,6 +21,26 @@ export function DeviceMapView({ devices, selectedDevice, onSelectDevice, onActio
   const width = 1000;
   const height = 500;
 
+  const devicesWithLocation = devices.filter(d => d.location && d.location.lat !== 0);
+
+  if (devices.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center bg-[#0a0e1a]">
+        <div className="text-center space-y-4 animate-fade-in">
+          <div className="w-20 h-20 mx-auto bg-slate-800/60 rounded-2xl flex items-center justify-center border border-slate-700/40">
+            <MapPin className="w-10 h-10 text-slate-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-slate-200">No Devices</h3>
+            <p className="text-sm text-slate-500 mt-1">
+              Add a device to see it on the map
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full overflow-y-auto bg-[#0a0e1a] p-4 md:p-6">
       {/* Map Container */}
@@ -129,7 +149,7 @@ export function DeviceMapView({ devices, selectedDevice, onSelectDevice, onActio
             })}
 
             {/* Device markers */}
-            {devices.map(device => {
+            {devices.filter(d => d.location && d.location.lat !== 0).map(device => {
               const { x, y } = latLngToXY(device.location.lat, device.location.lng, width, height);
               const isOnline = device.status === 'online';
               const isSelected = selectedDevice?.id === device.id;

@@ -5,160 +5,56 @@ import { VNCViewer } from './components/VNCViewer';
 import { PowerShellTerminal } from './components/PowerShellTerminal';
 import { FileManager } from './components/FileManager';
 import { DeviceMapView } from './components/DeviceMapView';
+import { AddDeviceModal } from './components/AddDeviceModal';
 import {
   LayoutDashboard,
   MonitorPlay,
   Terminal,
   FolderOpen,
   Map,
-  Wifi,
   Menu,
   X,
+  Plus,
+  Download,
 } from 'lucide-react';
 
-const DEMO_DEVICES: Device[] = [
-  {
-    id: 'dev-001',
-    name: 'Work Desktop',
-    hostname: 'WORK-PC-01',
-    ip: '192.168.1.100',
-    publicIp: '73.162.45.12',
-    os: 'Windows 11 Pro',
-    status: 'online',
-    location: { lat: 40.7128, lng: -74.006, city: 'New York', country: 'US' },
-    vncPort: 5900,
-    wsPort: 6080,
-    sshPort: 22,
-    lastSeen: new Date().toISOString(),
-    cpu: 34,
-    ram: 67,
-    disk: 45,
-    uptime: '3d 14h 22m',
-    tunnelUrl: 'wss://work-pc.trycloudflare.com',
-  },
-  {
-    id: 'dev-002',
-    name: 'Home Laptop',
-    hostname: 'HOME-LAPTOP',
-    ip: '192.168.1.105',
-    publicIp: '98.45.67.89',
-    os: 'Windows 10 Home',
-    status: 'online',
-    location: { lat: 34.0522, lng: -118.2437, city: 'Los Angeles', country: 'US' },
-    vncPort: 5900,
-    wsPort: 6080,
-    sshPort: 22,
-    lastSeen: new Date().toISOString(),
-    cpu: 12,
-    ram: 45,
-    disk: 72,
-    uptime: '1d 8h 5m',
-    tunnelUrl: 'wss://home-laptop.trycloudflare.com',
-  },
-  {
-    id: 'dev-003',
-    name: 'Server Room',
-    hostname: 'SRV-ROOM-01',
-    ip: '192.168.1.200',
-    publicIp: '51.12.34.56',
-    os: 'Windows Server 2022',
-    status: 'online',
-    location: { lat: 51.5074, lng: -0.1278, city: 'London', country: 'UK' },
-    vncPort: 5900,
-    wsPort: 6080,
-    sshPort: 22,
-    lastSeen: new Date().toISOString(),
-    cpu: 78,
-    ram: 89,
-    disk: 34,
-    uptime: '45d 2h 11m',
-    tunnelUrl: 'wss://srv-room.trycloudflare.com',
-  },
-  {
-    id: 'dev-004',
-    name: 'Dev Machine',
-    hostname: 'DEV-PC',
-    ip: '192.168.1.110',
-    publicIp: '82.64.12.98',
-    os: 'Windows 11 Pro',
-    status: 'offline',
-    location: { lat: 48.8566, lng: 2.3522, city: 'Paris', country: 'FR' },
-    vncPort: 5900,
-    wsPort: 6080,
-    sshPort: 22,
-    lastSeen: '2024-01-15T10:30:00Z',
-    cpu: 0,
-    ram: 0,
-    disk: 56,
-    uptime: '0m',
-  },
-  {
-    id: 'dev-005',
-    name: 'Media PC',
-    hostname: 'MEDIA-CENTER',
-    ip: '192.168.1.120',
-    publicIp: '126.45.78.90',
-    os: 'Windows 10 Pro',
-    status: 'online',
-    location: { lat: 35.6762, lng: 139.6503, city: 'Tokyo', country: 'JP' },
-    vncPort: 5900,
-    wsPort: 6080,
-    sshPort: 22,
-    lastSeen: new Date().toISOString(),
-    cpu: 5,
-    ram: 32,
-    disk: 88,
-    uptime: '12d 6h 44m',
-    tunnelUrl: 'wss://media-pc.trycloudflare.com',
-  },
-  {
-    id: 'dev-006',
-    name: 'Gaming Rig',
-    hostname: 'GAMING-PC',
-    ip: '192.168.1.130',
-    publicIp: '203.45.67.12',
-    os: 'Windows 11 Pro',
-    status: 'online',
-    location: { lat: -33.8688, lng: 151.2093, city: 'Sydney', country: 'AU' },
-    vncPort: 5900,
-    wsPort: 6080,
-    sshPort: 22,
-    lastSeen: new Date().toISOString(),
-    cpu: 22,
-    ram: 55,
-    disk: 61,
-    uptime: '7d 3h 18m',
-    tunnelUrl: 'wss://gaming-pc.trycloudflare.com',
-  },
-];
+// Load devices from localStorage
+function loadDevices(): Device[] {
+  try {
+    const stored = localStorage.getItem('remotedesk-devices');
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('Failed to load devices:', e);
+  }
+  return [];
+}
+
+// Save devices to localStorage
+function saveDevices(devices: Device[]) {
+  try {
+    localStorage.setItem('remotedesk-devices', JSON.stringify(devices));
+  } catch (e) {
+    console.error('Failed to save devices:', e);
+  }
+}
 
 function App() {
-  const [devices, setDevices] = useState<Device[]>(DEMO_DEVICES);
+  const [devices, setDevices] = useState<Device[]>(loadDevices());
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  // Save devices whenever they change
+  useEffect(() => {
+    saveDevices(devices);
+  }, [devices]);
 
   const onlineCount = devices.filter(d => d.status === 'online').length;
   const offlineCount = devices.filter(d => d.status === 'offline').length;
-
-  // Simulate live CPU/RAM updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDevices(prev =>
-        prev.map(d =>
-          d.status === 'online'
-            ? {
-                ...d,
-                cpu: Math.max(1, Math.min(99, d.cpu + Math.floor(Math.random() * 11) - 5)),
-                ram: Math.max(10, Math.min(99, d.ram + Math.floor(Math.random() * 7) - 3)),
-              }
-            : d
-        )
-      );
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
 
   const handleSelectDevice = (device: Device) => {
     setSelectedDevice(device);
@@ -169,6 +65,19 @@ function App() {
     setSelectedDevice(device);
     setViewMode(action);
     setMobileSidebarOpen(false);
+  };
+
+  const handleAddDevice = (device: Device) => {
+    setDevices(prev => [...prev, device]);
+    setShowAddModal(false);
+  };
+
+  const handleDeleteDevice = (deviceId: string) => {
+    setDevices(prev => prev.filter(d => d.id !== deviceId));
+    if (selectedDevice?.id === deviceId) {
+      setSelectedDevice(null);
+      setViewMode('dashboard');
+    }
   };
 
   const navItems = [
@@ -277,36 +186,48 @@ function App() {
               </div>
             </div>
             <div className="px-2 pb-2 max-h-[40vh] overflow-y-auto space-y-0.5">
-              {devices.map(device => (
-                <button
-                  key={device.id}
-                  onClick={() => handleSelectDevice(device)}
-                  className={`
-                    w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all
-                    ${selectedDevice?.id === device.id
-                      ? 'bg-slate-800/80 border border-slate-700/60'
-                      : 'hover:bg-slate-800/40 border border-transparent'
-                    }
-                  `}
-                >
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                    device.status === 'online'
-                      ? 'bg-green-500/10 text-green-400'
-                      : 'bg-slate-800 text-slate-600'
-                  }`}>
-                    <i className={`fa-solid fa-${device.os.includes('Server') ? 'server' : 'computer'} text-xs`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-slate-200 truncate">{device.name}</span>
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        device.status === 'online' ? 'bg-green-400 pulse-online' : 'bg-slate-600'
-                      }`} />
+              {devices.length === 0 ? (
+                <div className="px-3 py-4 text-center">
+                  <p className="text-xs text-slate-500 mb-2">No devices yet</p>
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="text-xs text-blue-400 hover:text-blue-300 font-medium"
+                  >
+                    + Add your first device
+                  </button>
+                </div>
+              ) : (
+                devices.map(device => (
+                  <button
+                    key={device.id}
+                    onClick={() => handleSelectDevice(device)}
+                    className={`
+                      w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all
+                      ${selectedDevice?.id === device.id
+                        ? 'bg-slate-800/80 border border-slate-700/60'
+                        : 'hover:bg-slate-800/40 border border-transparent'
+                      }
+                    `}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                      device.status === 'online'
+                        ? 'bg-green-500/10 text-green-400'
+                        : 'bg-slate-800 text-slate-600'
+                    }`}>
+                      <i className={`fa-solid fa-${device.os?.includes('Server') ? 'server' : 'computer'} text-xs`} />
                     </div>
-                    <p className="text-[10px] text-slate-500 truncate">{device.location.city}, {device.location.country}</p>
-                  </div>
-                </button>
-              ))}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-medium text-slate-200 truncate">{device.name}</span>
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          device.status === 'online' ? 'bg-green-400 pulse-online' : 'bg-slate-600'
+                        }`} />
+                      </div>
+                      <p className="text-[10px] text-slate-500 truncate">{device.location?.city || 'Unknown'}</p>
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         )}
@@ -334,23 +255,30 @@ function App() {
               <p className="text-[11px] text-slate-500">
                 {viewMode === 'dashboard' && `${onlineCount} devices online, ${offlineCount} offline`}
                 {viewMode === 'map' && 'Geographic view of all connected devices'}
-                {viewMode === 'vnc' && selectedDevice && `Remote desktop via noVNC • ${selectedDevice.location.city}`}
+                {viewMode === 'vnc' && selectedDevice && 'Remote desktop via noVNC'}
                 {viewMode === 'terminal' && selectedDevice && 'Remote PowerShell session'}
                 {viewMode === 'files' && selectedDevice && 'Browse and manage remote files'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/40">
-              <Wifi className="w-3.5 h-3.5 text-green-400" />
-              <span className="text-xs font-medium text-green-400">{onlineCount}</span>
-              <span className="text-[10px] text-slate-500">/</span>
-              <span className="text-xs text-slate-400">{devices.length}</span>
-            </div>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-xs font-bold text-white">
-              A
-            </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30 transition-colors text-sm font-medium"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Add Device</span>
+            </button>
+            <a
+              href="/setup-remote.ps1"
+              download
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/60 text-slate-400 border border-slate-700/40 hover:bg-slate-800 hover:text-slate-200 transition-colors text-sm"
+              title="Download setup script"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Setup Script</span>
+            </a>
           </div>
         </header>
 
@@ -362,6 +290,7 @@ function App() {
               selectedDevice={selectedDevice}
               onSelectDevice={handleSelectDevice}
               onAction={handleAction}
+              onDeleteDevice={handleDeleteDevice}
             />
           )}
           {viewMode === 'map' && (
@@ -377,6 +306,14 @@ function App() {
           {viewMode === 'files' && <FileManager device={selectedDevice} />}
         </main>
       </div>
+
+      {/* Add Device Modal */}
+      {showAddModal && (
+        <AddDeviceModal
+          onAdd={handleAddDevice}
+          onClose={() => setShowAddModal(false)}
+        />
+      )}
     </div>
   );
 }

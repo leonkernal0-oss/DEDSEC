@@ -3,7 +3,7 @@ import { Terminal as XTerminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { Device } from '../types';
-import { Terminal as TermIcon, Send, Trash2, Download, AlertCircle, Copy } from 'lucide-react';
+import { Terminal as TermIcon, Send, Trash2, Download, AlertCircle, Copy, Plug, PlugZap } from 'lucide-react';
 
 interface PowerShellTerminalProps {
   device: Device | null;
@@ -13,15 +13,10 @@ export function PowerShellTerminal({ device }: PowerShellTerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const [inputValue, setInputValue] = useState('');
-  const [commandHistory, setCommandHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const deviceRef = useRef<Device | null>(null);
-
-  // Keep device ref updated
-  useEffect(() => {
-    deviceRef.current = device;
-  }, [device]);
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState('');
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -59,7 +54,6 @@ export function PowerShellTerminal({ device }: PowerShellTerminalProps) {
     term.loadAddon(fitAddon);
     term.open(terminalRef.current);
 
-    // Delay fit to ensure container is sized
     setTimeout(() => {
       try { fitAddon.fit(); } catch(e) {}
     }, 100);
@@ -73,32 +67,22 @@ export function PowerShellTerminal({ device }: PowerShellTerminalProps) {
     };
     window.addEventListener('resize', handleResize);
 
-    // Handle keyboard input
-    term.onData((data) => {
-      if (data === '\r') {
-        handleCommand(inputValue);
-      } else if (data === '\u007f') {
-        setInputValue(prev => prev.slice(0, -1));
-        term.write('\b \b');
-      } else if (data >= ' ') {
-        setInputValue(prev => prev + data);
-        term.write(data);
-      }
-    });
-
-    // Welcome message
-    const dev = deviceRef.current;
-    if (dev && dev.status === 'online') {
-      printWelcome(term, dev);
-    } else if (dev) {
+    // If device is available and online, try to connect via WebSocket
+    if (device && device.status === 'online' && device.tunnelUrl) {
+      connectToTerminal(term, device);
+    } else if (device && device.status !== 'online') {
       term.writeln('\r\n\x1b[31m  Device is offline. Cannot establish terminal session.\x1b[0m');
-      term.writeln('\x1b[90m  Last seen: ' + new Date(dev.lastSeen).toLocaleString() + '\x1b[0m');
     } else {
       term.writeln('\r\n\x1b[90m  No device selected. Choose a device to start a PowerShell session.\x1b[0m');
+      term.writeln('\x1b[90m  Click "Add Device" in the top right to register a PC.\x1b[0m');
     }
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
       term.dispose();
     };
   }, [device?.id]);
@@ -111,168 +95,165 @@ export function PowerShellTerminal({ device }: PowerShellTerminalProps) {
     return () => clearTimeout(timer);
   }, [device]);
 
-  const printWelcome = (term: XTerminal, dev: Device) => {
+  const connectToTerminal = (term: XTerminal, dev: Device) => {
     term.writeln('');
     term.writeln('\x1b[36m  ================================================\x1b[0m');
-    term.writeln(`\x1b[36m  |\x1b[0m  \x1b[1;37mPowerShell Remote Session\x1b[0m`);
-    term.writeln(`\x1b[36m  |\x1b[0m  \x1b[90mConnected to:\x1b[0m ${dev.name}`);
-    term.writeln(`\x1b[36m  |\x1b[0m  \x1b[90mHostname:\x1b[0m    ${dev.hostname}`);
-    term.writeln(`\x1b[36m  |\x1b[0m  \x1b[90mOS:\x1b[0m         ${dev.os}`);
-    term.writeln(`\x1b[36m  |\x1b[0m  \x1b[90mLocation:\x1b[0m   ${dev.location.city}, ${dev.location.country}`);
+    term.writeln(`\x1b[36m  |\x1b[0m  \x1b[1;37mRemoteDesk Terminal\x1b[0m`);
+    term.writeln(`\x1b[36m  |\x1b[0m  \x1b[90mConnecting to:\x1b[0m ${dev.name}`);
+    term.writeln(`\x1b[36m  |\x1b[0m  \x1b[90mTunnel:\x1b[0m ${dev.tunnelUrl}`);
     term.writeln('\x1b[36m  ================================================\x1b[0m');
     term.writeln('');
-    term.writeln('\x1b[32m  Windows PowerShell\x1b[0m');
-    term.writeln('\x1b[90m  Copyright (C) Microsoft Corporation. All rights reserved.\x1b[0m');
+
+    // Build WebSocket URL for terminal
+    // The setup script should also expose a terminal WebSocket endpoint
+    const wsUrl = dev.tunnelUrl
+      .replace('https://', 'wss://')
+      .replace('http://', 'ws://');
+    
+    // Try connecting to a terminal WebSocket endpoint
+    // In production, the setup script would run a WebSocket server for terminal access
+    const terminalWsUrl = `${wsUrl}/terminal`;
+    
+    term.writeln('\x1b[33m  [*] Attempting WebSocket connection...\x1b[0m');
+    term.writeln(`\x1b[90m  URL: ${terminalWsUrl}\x1b[0m`);
     term.writeln('');
-    term.writeln('\x1b[90m  Type "help" for available commands.\x1b[0m');
+
+    try {
+      const ws = new WebSocket(terminalWsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setIsConnected(true);
+        setConnectionError('');
+        term.writeln('\x1b[32m  [OK] Connected! Type commands below.\x1b[0m');
+        term.writeln('\x1b[90m  (You can also use the input bar at the bottom)\x1b[0m');
+        term.writeln('');
+        writePrompt(term, dev);
+      };
+
+      ws.onmessage = (event) => {
+        term.write(event.data);
+      };
+
+      ws.onerror = () => {
+        setConnectionError('WebSocket connection failed');
+        term.writeln('\x1b[31m  [!] WebSocket connection failed.\x1b[0m');
+        term.writeln('');
+        showFallbackInfo(term, dev);
+      };
+
+      ws.onclose = () => {
+        setIsConnected(false);
+        term.writeln('\r\n\x1b[33m  Connection closed.\x1b[0m');
+      };
+
+      // Handle terminal input
+      term.onData((data) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(data);
+        } else {
+          // Fallback: simulate commands locally
+          handleLocalCommand(term, data, dev);
+        }
+      });
+
+      // Timeout - if not connected in 5 seconds, show fallback
+      setTimeout(() => {
+        if (ws.readyState !== WebSocket.OPEN) {
+          ws.close();
+          setConnectionError('Connection timeout');
+          showFallbackInfo(term, dev);
+        }
+      }, 5000);
+
+    } catch (e) {
+      setConnectionError('Failed to create WebSocket');
+      showFallbackInfo(term, dev);
+    }
+  };
+
+  const showFallbackInfo = (term: XTerminal, dev: Device) => {
+    term.writeln('\x1b[33m  ────────────────────────────────────────────────\x1b[0m');
+    term.writeln('');
+    term.writeln('\x1b[33m  [INFO] Direct WebSocket terminal not available.\x1b[0m');
+    term.writeln('');
+    term.writeln('\x1b[90m  The setup script creates a VNC tunnel but not a\x1b[0m');
+    term.writeln('\x1b[90m  terminal WebSocket. To get full terminal access:\x1b[0m');
+    term.writeln('');
+    term.writeln('\x1b[36m  Option 1: Use Screen Control (VNC)\x1b[0m');
+    term.writeln('\x1b[90m  → Open PowerShell from the remote desktop\x1b[0m');
+    term.writeln('');
+    term.writeln('\x1b[36m  Option 2: Upgrade the setup script\x1b[0m');
+    term.writeln('\x1b[90m  → Add a WebSocket terminal server to the script\x1b[0m');
+    term.writeln('\x1b[90m  → Example: python -m websockify 6081 localhost:5901\x1b[0m');
+    term.writeln('');
+    term.writeln('\x1b[33m  ────────────────────────────────────────────────\x1b[0m');
+    term.writeln('');
+    term.writeln('\x1b[90m  Device: ' + dev.name + '\x1b[0m');
+    term.writeln('\x1b[90m  Tunnel: ' + dev.tunnelUrl + '\x1b[0m');
+    term.writeln('\x1b[90m  Status: ' + (isConnected ? 'Connected' : 'Not connected') + '\x1b[0m');
     term.writeln('');
     writePrompt(term, dev);
+    
+    // Enable local command simulation
+    enableLocalMode(term, dev);
+  };
+
+  const enableLocalMode = (term: XTerminal, dev: Device) => {
+    let currentInput = '';
+    
+    term.onData((data) => {
+      if (data === '\r') {
+        term.writeln('');
+        processLocalCommand(term, currentInput.trim(), dev);
+        currentInput = '';
+        writePrompt(term, dev);
+      } else if (data === '\u007f') {
+        if (currentInput.length > 0) {
+          currentInput = currentInput.slice(0, -1);
+          term.write('\b \b');
+        }
+      } else if (data >= ' ') {
+        currentInput += data;
+        term.write(data);
+      }
+    });
+  };
+
+  const handleLocalCommand = (term: XTerminal, data: string, dev: Device) => {
+    // This is called when WebSocket is not connected
+    // Just ignore - the enableLocalMode handler will process it
   };
 
   const writePrompt = (term: XTerminal, dev: Device) => {
     term.write(`\r\n\x1b[34mPS ${dev.hostname}\\Users\\Admin>\x1b[0m `);
   };
 
-  const handleCommand = (cmd: string) => {
-    const term = xtermRef.current;
-    const dev = deviceRef.current;
-    if (!term || !dev || dev.status !== 'online') return;
-
-    term.writeln('');
-    setInputValue('');
-
-    if (cmd.trim()) {
-      setCommandHistory(prev => [...prev, cmd]);
-      setHistoryIndex(-1);
-      processCommand(term, cmd.trim(), dev);
-    }
-
-    writePrompt(term, dev);
-  };
-
-  const processCommand = (term: XTerminal, cmd: string, dev: Device) => {
-    const lowerCmd = cmd.toLowerCase().trim();
-
-    if (lowerCmd === 'cls' || lowerCmd === 'clear') {
-      term.clear();
-      return;
-    }
-
-    if (lowerCmd.startsWith('echo ')) {
-      term.writeln(`\r\n${cmd.slice(5)}`);
-      return;
-    }
+  const processLocalCommand = (term: XTerminal, cmd: string, dev: Device) => {
+    if (!cmd) return;
+    
+    const lowerCmd = cmd.toLowerCase();
 
     if (lowerCmd === 'help') {
       term.writeln('');
-      term.writeln('\x1b[33m  Available commands:\x1b[0m');
-      term.writeln('  \x1b[36mGet-Process\x1b[0m       List running processes');
-      term.writeln('  \x1b[36mGet-Service\x1b[0m       List services');
-      term.writeln('  \x1b[36mGet-ComputerInfo\x1b[0m  System information');
-      term.writeln('  \x1b[36mGet-NetIPAddress\x1b[0m  Network configuration');
-      term.writeln('  \x1b[36mGet-Volume\x1b[0m        Disk volumes');
-      term.writeln('  \x1b[36mdir / ls\x1b[0m          List directory');
-      term.writeln('  \x1b[36msysteminfo\x1b[0m        System information');
-      term.writeln('  \x1b[36mtasklist\x1b[0m          Running tasks');
-      term.writeln('  \x1b[36mipconfig\x1b[0m          Network configuration');
-      term.writeln('  \x1b[36mwhoami\x1b[0m            Current user');
-      term.writeln('  \x1b[36mhostname\x1b[0m          Computer hostname');
-      term.writeln('  \x1b[36mdate\x1b[0m              Current date/time');
-      term.writeln('  \x1b[36mping <host>\x1b[0m       Ping a host');
-      term.writeln('  \x1b[36mcls / clear\x1b[0m       Clear terminal');
+      term.writeln('\x1b[33m  Available commands (simulated):\x1b[0m');
+      term.writeln('  \x1b[36mhelp\x1b[0m             Show this help');
+      term.writeln('  \x1b[36mdir / ls\x1b[0m         List files');
+      term.writeln('  \x1b[36mwhoami\x1b[0m           Show current user');
+      term.writeln('  \x1b[36mhostname\x1b[0m         Show hostname');
+      term.writeln('  \x1b[36msysteminfo\x1b[0m       Show system info');
+      term.writeln('  \x1b[36mipconfig\x1b[0m         Show network info');
+      term.writeln('  \x1b[36mdate\x1b[0m             Show date/time');
+      term.writeln('  \x1b[36mecho <text>\x1b[0m      Print text');
+      term.writeln('  \x1b[36mcls / clear\x1b[0m      Clear screen');
+      term.writeln('');
+      term.writeln('\x1b[90m  Note: For real commands, connect via VNC and\x1b[0m');
+      term.writeln('\x1b[90m  open PowerShell on the remote desktop.\x1b[0m');
       return;
     }
 
-    if (lowerCmd.startsWith('ping ')) {
-      const host = cmd.slice(5);
-      term.writeln('');
-      term.writeln(`  Pinging ${host} with 32 bytes of data:`);
-      term.writeln(`  Reply from 142.250.80.46: bytes=32 time=12ms TTL=118`);
-      term.writeln(`  Reply from 142.250.80.46: bytes=32 time=11ms TTL=118`);
-      term.writeln(`  Reply from 142.250.80.46: bytes=32 time=13ms TTL=118`);
-      term.writeln(`  Reply from 142.250.80.46: bytes=32 time=12ms TTL=118`);
-      term.writeln('');
-      term.writeln(`  Ping statistics for ${host}:`);
-      term.writeln('      Packets: Sent = 4, Received = 4, Lost = 0 (0% loss)');
-      return;
-    }
-
-    if (lowerCmd === 'dir' || lowerCmd === 'ls') {
-      term.writeln('');
-      term.writeln(`  Directory of C:\\Users\\Admin`);
-      term.writeln('');
-      term.writeln('  01/15/2024  10:30 AM    <DIR>          .');
-      term.writeln('  01/15/2024  10:30 AM    <DIR>          ..');
-      term.writeln('  01/15/2024  09:00 AM    <DIR>          Desktop');
-      term.writeln('  01/14/2024  03:22 PM    <DIR>          Documents');
-      term.writeln('  01/14/2024  03:22 PM    <DIR>          Downloads');
-      term.writeln('  01/10/2024  11:45 AM    <DIR>          Pictures');
-      term.writeln('  01/12/2024  08:15 AM    <DIR>          Projects');
-      term.writeln('                 0 File(s)              0 bytes');
-      term.writeln('                 7 Dir(s)  234,567,890,123 bytes free');
-      return;
-    }
-
-    if (lowerCmd === 'get-process' || lowerCmd === 'tasklist') {
-      term.writeln('');
-      term.writeln('\x1b[33m  Handles  NPM(K)    PM(K)      WS(K)   CPU(s)     Id  ProcessName\x1b[0m');
-      term.writeln('  -------  ------    -----      -----   ------     --  -----------');
-      term.writeln('      312      18    12456      24576     2.34   1234  chrome');
-      term.writeln('      187      12     8920      15432     0.89   5678  explorer');
-      term.writeln('       95       8     4560       8900     0.12   9012  svchost');
-      term.writeln('      456      24    45678      67890    12.45   3456  powershell');
-      term.writeln('      123      10     6780      12340     0.56   7890  notepad');
-      term.writeln('');
-      return;
-    }
-
-    if (lowerCmd === 'get-service') {
-      term.writeln('');
-      term.writeln('\x1b[33m  Status   Name               DisplayName\x1b[0m');
-      term.writeln('  ------   ----               -----------');
-      term.writeln('  Running  Audiosrv           Windows Audio');
-      term.writeln('  Running  Dhcp               DHCP Client');
-      term.writeln('  Running  Dnscache           DNS Client');
-      term.writeln('  Running  WinRM              Windows Remote Management');
-      term.writeln('  Stopped  RemoteRegistry     Remote Registry');
-      term.writeln('');
-      return;
-    }
-
-    if (lowerCmd === 'get-computerinfo' || lowerCmd === 'systeminfo') {
-      term.writeln('');
-      term.writeln(`  Host Name:                 ${dev.hostname}`);
-      term.writeln(`  OS Name:                   ${dev.os}`);
-      term.writeln(`  OS Version:                10.0.22621 Build 22621`);
-      term.writeln(`  System Type:               x64-based PC`);
-      term.writeln(`  Processor:                 Intel Core i7-12700K`);
-      term.writeln(`  Total Physical Memory:     32,768 MB`);
-      term.writeln(`  Available Physical Memory: ${(32768 * (1 - dev.ram / 100)).toFixed(0)} MB`);
-      term.writeln(`  Network:                   ${dev.ip}`);
-      term.writeln('');
-      return;
-    }
-
-    if (lowerCmd === 'get-netipaddress' || lowerCmd === 'ipconfig') {
-      term.writeln('');
-      term.writeln('  Windows IP Configuration');
-      term.writeln('');
-      term.writeln('  Ethernet adapter Ethernet:');
-      term.writeln(`     IPv4 Address. . . . . . . . . . . : ${dev.ip}`);
-      term.writeln('     Subnet Mask . . . . . . . . . . . : 255.255.255.0');
-      term.writeln('     Default Gateway . . . . . . . . . : 192.168.1.1');
-      term.writeln('     DNS Servers . . . . . . . . . . . : 8.8.8.8');
-      term.writeln('');
-      return;
-    }
-
-    if (lowerCmd === 'get-volume') {
-      term.writeln('');
-      term.writeln('\x1b[33m  Drive  Label       SizeRemaining    Size  Health\x1b[0m');
-      term.writeln('  -----  -----       -------------    ----  ------');
-      term.writeln('  C      System      234.5 GB         500 GB   Healthy');
-      term.writeln('  D      Data        890.2 GB         1000 GB  Healthy');
-      term.writeln('');
+    if (lowerCmd === 'cls' || lowerCmd === 'clear') {
+      term.clear();
       return;
     }
 
@@ -291,27 +272,66 @@ export function PowerShellTerminal({ device }: PowerShellTerminalProps) {
       return;
     }
 
-    // Unknown command
-    term.writeln(`\r\n\x1b[31m  '${cmd}' is not recognized as a command.\x1b[0m`);
-    term.writeln(`\x1b[90m  Type 'help' for available commands.\x1b[0m`);
+    if (lowerCmd.startsWith('echo ')) {
+      term.writeln(`\r\n  ${cmd.slice(5)}`);
+      return;
+    }
+
+    if (lowerCmd === 'systeminfo') {
+      term.writeln('');
+      term.writeln(`  Host Name:        ${dev.hostname}`);
+      term.writeln(`  OS:               ${dev.os}`);
+      term.writeln(`  Tunnel URL:       ${dev.tunnelUrl}`);
+      term.writeln(`  Last Seen:        ${new Date(dev.lastSeen).toLocaleString()}`);
+      term.writeln('');
+      return;
+    }
+
+    if (lowerCmd === 'ipconfig') {
+      term.writeln('');
+      term.writeln('  Ethernet adapter:');
+      term.writeln(`     IP Address:  ${dev.ip}`);
+      term.writeln('     Tunnel:      ' + dev.tunnelUrl);
+      term.writeln('');
+      return;
+    }
+
+    if (lowerCmd === 'dir' || lowerCmd === 'ls') {
+      term.writeln('');
+      term.writeln('  Directory of C:\\Users\\Admin');
+      term.writeln('');
+      term.writeln('  01/15/2024  10:30 AM    <DIR>          Desktop');
+      term.writeln('  01/14/2024  03:22 PM    <DIR>          Documents');
+      term.writeln('  01/14/2024  03:22 PM    <DIR>          Downloads');
+      term.writeln('  01/10/2024  11:45 AM    <DIR>          Pictures');
+      term.writeln('');
+      return;
+    }
+
+    term.writeln(`\r\n\x1b[31m  '${cmd}' - Use VNC screen control for real commands.\x1b[0m`);
+    term.writeln(`\x1b[90m  Type 'help' for available simulated commands.\x1b[0m`);
   };
 
   const handleSendCommand = () => {
-    if (inputValue.trim()) {
-      handleCommand(inputValue);
+    const term = xtermRef.current;
+    if (!term || !device) return;
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(inputValue + '\r\n');
+    } else {
+      // Local mode
+      term.writeln('');
+      processLocalCommand(term, inputValue.trim(), device);
+      writePrompt(term, device);
     }
+    setInputValue('');
   };
 
   const handleClearTerminal = () => {
     xtermRef.current?.clear();
-    const dev = deviceRef.current;
-    if (dev && dev.status === 'online') {
-      writePrompt(xtermRef.current!, dev);
+    if (device && device.status === 'online') {
+      writePrompt(xtermRef.current!, device);
     }
-  };
-
-  const handleCopyOutput = () => {
-    navigator.clipboard?.writeText(commandHistory.join('\n'));
   };
 
   if (!device) {
@@ -356,34 +376,31 @@ export function PowerShellTerminal({ device }: PowerShellTerminalProps) {
       <div className="h-12 bg-[#0d1225] border-b border-slate-800/80 flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-400 pulse-online" />
-            <TermIcon className="w-4 h-4 text-green-400" />
+            {isConnected ? (
+              <PlugZap className="w-4 h-4 text-green-400" />
+            ) : (
+              <Plug className="w-4 h-4 text-slate-500" />
+            )}
+            <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400 pulse-online' : 'bg-slate-600'}`} />
             <span className="text-sm font-medium text-slate-200">PowerShell</span>
           </div>
           <span className="text-xs text-slate-600">|</span>
           <span className="text-xs text-slate-500">{device.hostname}</span>
+          {connectionError && (
+            <>
+              <span className="text-xs text-slate-600">|</span>
+              <span className="text-xs text-amber-400">{connectionError}</span>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-1">
-          <button
-            onClick={handleCopyOutput}
-            className="p-2 rounded-lg hover:bg-slate-800/60 transition-colors"
-            title="Copy output"
-          >
-            <Copy className="w-4 h-4 text-slate-400" />
-          </button>
           <button
             onClick={handleClearTerminal}
             className="p-2 rounded-lg hover:bg-slate-800/60 transition-colors"
             title="Clear terminal"
           >
             <Trash2 className="w-4 h-4 text-slate-400" />
-          </button>
-          <button
-            className="p-2 rounded-lg hover:bg-slate-800/60 transition-colors"
-            title="Export log"
-          >
-            <Download className="w-4 h-4 text-slate-400" />
           </button>
         </div>
       </div>
@@ -402,27 +419,8 @@ export function PowerShellTerminal({ device }: PowerShellTerminalProps) {
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleSendCommand();
-            if (e.key === 'ArrowUp') {
-              e.preventDefault();
-              if (commandHistory.length > 0) {
-                const newIndex = historyIndex < commandHistory.length - 1 ? historyIndex + 1 : historyIndex;
-                setHistoryIndex(newIndex);
-                setInputValue(commandHistory[commandHistory.length - 1 - newIndex]);
-              }
-            }
-            if (e.key === 'ArrowDown') {
-              e.preventDefault();
-              if (historyIndex > 0) {
-                const newIndex = historyIndex - 1;
-                setHistoryIndex(newIndex);
-                setInputValue(commandHistory[commandHistory.length - 1 - newIndex]);
-              } else {
-                setHistoryIndex(-1);
-                setInputValue('');
-              }
-            }
           }}
-          placeholder="Type a PowerShell command..."
+          placeholder="Type a command..."
           className="flex-1 bg-transparent text-sm text-slate-200 font-mono outline-none placeholder:text-slate-600"
         />
         <button

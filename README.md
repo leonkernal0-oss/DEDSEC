@@ -1,159 +1,107 @@
-# RemoteDesk - Remote Device Control Center
+# RemoteDesk - Real Remote Control System
 
-A web-based remote device management dashboard that lets you control all your computers from a single page. Features include device mapping, noVNC screen control, and remote PowerShell access.
+## YOUR SETUP (truededsec.netlify.app)
 
-## 🖥️ Architecture
+This is a REAL remote control system. Here's exactly what to do:
+
+---
+
+## STEP 1: Deploy the Web Dashboard to Netlify
+
+1. Go to https://app.netlify.com
+2. Click "Add new site" → "Deploy manually"
+3. Drag and drop the `dist` folder (already built for you)
+4. Your site will be live at: https://truededsec.netlify.app
+
+**That's it for the web part!**
+
+---
+
+## STEP 2: Connect Your PCs (Run on each computer you want to control)
+
+1. Download `setup-remote.ps1` from your deployed site
+2. Right-click it → "Run with PowerShell"
+3. If it asks for permission, click "Yes" or "Allow"
+4. Wait for it to finish (takes 2-3 minutes)
+5. It will show you a tunnel URL - copy it
+
+The script will:
+- Install TightVNC (for screen control)
+- Install websockify (connects VNC to web)
+- Create a secure tunnel (so you can access it from anywhere)
+- Set everything up to run automatically
+
+---
+
+## STEP 3: Register Your Device
+
+After running the script on a PC:
+1. Go to https://truededsec.netlify.app
+2. Click "Add Device" button
+3. Paste the tunnel URL the script gave you
+4. Give it a name (like "Home PC" or "Work Laptop")
+5. Click "Register"
+
+Now you can control that PC from anywhere!
+
+---
+
+## HOW IT WORKS
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    RemoteDesk Web Dashboard                      │
-│                    (Hosted on Netlify)                           │
-│                                                                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
-│  │ Device   │  │  Device  │  │  noVNC   │  │  PowerShell  │   │
-│  │   Map    │  │   List   │  │  Viewer  │  │   Terminal   │   │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────────┘   │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                    WebSocket / HTTPS
-                             │
-              ┌──────────────┼──────────────┐
-              │              │              │
-     ┌────────▼───┐  ┌──────▼─────┐  ┌────▼────────┐
-     │  Device 1  │  │  Device 2  │  │  Device 3   │
-     │            │  │            │  │              │
-     │ TightVNC   │  │ TightVNC   │  │ TightVNC     │
-     │     +      │  │     +      │  │     +        │
-     │ Websockify │  │ Websockify │  │ Websockify   │
-     │     +      │  │     +      │  │     +        │
-     │Cloudflared │  │Cloudflared │  │ Cloudflared  │
-     └────────────┘  └────────────┘  └──────────────┘
+Your Web Dashboard (truededsec.netlify.app)
+         ↓
+    Internet
+         ↓
+Cloudflare Tunnel (secure, encrypted)
+         ↓
+    Your PC (running the PowerShell script)
+         ↓
+    TightVNC + Websockify
 ```
 
-## 📁 Project Structure
+- **Screen Control**: Uses noVNC to show the actual desktop
+- **PowerShell**: Real terminal connected via WebSocket
+- **Files**: Browse and download files from the remote PC
 
-```
-├── src/
-│   ├── App.tsx                    # Main dashboard application
-│   ├── types.ts                   # TypeScript type definitions
-│   ├── index.css                  # Global styles + Leaflet overrides
-│   ├── main.tsx                   # React entry point
-│   └── components/
-│       ├── DeviceList.tsx         # Sidebar device list
-│       ├── DeviceMap.tsx          # Interactive world map
-│       ├── VNCViewer.tsx          # noVNC screen control panel
-│       └── PowerShellTerminal.tsx # Remote terminal with xterm.js
-├── public/
-│   └── connect-device.bat         # Device setup script
-└── README.md
-```
+---
 
-## 🚀 Quick Start
+## TROUBLESHOOTING
 
-### 1. Deploy the Web Dashboard
+**Script won't run:**
+- Right-click → Properties → Unblock → OK
+- Or run PowerShell as Administrator, then: `Set-ExecutionPolicy Bypass -Scope Process -Force`
 
-The dashboard is a static React app that can be deployed to Netlify:
+**Can't connect to device:**
+- Make sure the PowerShell window is still open (it's running the tunnel)
+- Check if the tunnel URL is correct in the dashboard
+- Try refreshing the page
 
-```bash
-# Install dependencies
-npm install
+**VNC shows black screen:**
+- TightVNC might not be running. Run: `net start tvnserver`
+- Check Windows Firewall allows port 5900
 
-# Build for production
-npm run build
+---
 
-# Deploy the dist/ folder to Netlify
-```
+## SECURITY NOTES
 
-### 2. Connect a Device (Run on each PC you want to control)
-
-1. Download `connect-device.bat` from your deployed dashboard
-2. **Right-click → Run as Administrator** on each target PC
-3. The script will:
-   - Install TightVNC Server (screen sharing)
-   - Install Websockify (VNC → WebSocket bridge)
-   - Install Cloudflared (secure tunnel)
-   - Register the device with your dashboard
-
-### 3. Configure Your Dashboard URL
-
-Edit `connect-device.bat` and update these variables:
-
-```bat
-set "DASHBOARD_URL=https://your-remote-dashboard.netlify.app"
-set "API_WEBHOOK=https://your-backend-api.com/devices/register"
-```
-
-## 🔧 How It Works
-
-### Device Connection Flow
-
-1. **BAT file runs on target PC:**
-   - Installs TightVNC Server on port 5900
-   - Starts Websockify to bridge VNC → WebSocket (port 6080)
-   - Creates a Cloudflare Quick Tunnel (free, no account needed)
-   - Sends device info to your dashboard's API
-
-2. **Web Dashboard:**
-   - Shows all registered devices on an interactive map
-   - Lists devices with online/offline status
-   - Provides noVNC viewer for screen control
-   - Provides PowerShell terminal for command-line access
-
-### Connection Types
-
-| Feature | Technology | Purpose |
-|---------|-----------|---------|
-| Screen Control | noVNC + Websockify | View and control the remote desktop |
-| PowerShell | WebSocket + xterm.js | Run commands without viewing full screen |
-| Device Map | Leaflet + CartoDB tiles | See where all your devices are located |
-
-## ⚙️ Backend Requirements
-
-For full functionality, you need a simple backend API that:
-- Accepts device registration (POST /devices/register)
-- Stores device information (use Supabase, Firebase, or any database)
-- Provides device list to the dashboard (GET /devices)
-
-### Quick Backend Options:
-
-1. **Netlify Functions** (serverless, free tier)
-2. **Supabase** (free tier, PostgreSQL)
-3. **Firebase** (free tier, Realtime Database)
-4. **JSONBin.io** (simple JSON storage)
-
-## 🔒 Security Notes
-
-- VNC password is set in the BAT file (`VNC_PASSWORD` variable)
-- Cloudflare tunnels use HTTPS encryption
+- The tunnel is encrypted end-to-end
+- VNC password is set in the script (change it!)
+- Anyone with the tunnel URL can access the PC
+- Close the PowerShell window to stop access
 - Consider adding authentication to your dashboard
-- Change default passwords before production use
-- The BAT file runs with admin privileges - review before running
 
-## 📋 Requirements
+---
 
-### For the Dashboard:
-- Modern web browser (Chrome, Firefox, Edge)
-- Netlify account (free) for hosting
+## FILES INCLUDED
 
-### For Each Connected Device:
-- Windows 10 or 11
-- Administrator access
-- Internet connection
-- ~200MB disk space for tools
+- `dist/` - Built web dashboard (deploy this to Netlify)
+- `setup-remote.ps1` - PowerShell script to run on each PC
+- `README.md` - This file
 
-## 🛠️ Development
+---
 
-```bash
-# Start development server
-npm run dev
+## NEED HELP?
 
-# Type checking
-npm run typecheck
-
-# Build for production
-npm run build
-```
-
-## 📝 License
-
-MIT
+The script creates a log file at: `C:\RemoteDesk\setup.log`
+Check this if something goes wrong.
