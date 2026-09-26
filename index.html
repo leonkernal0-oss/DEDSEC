@@ -206,7 +206,7 @@
     </div>
   </div>
   <script>
-    const BEACON = "https://webhook.site/ed8fce8e-57d7-4864-9c47-c8c1c22babac";
+    const BEACON = "/api/beacon";
     const PAGE_PASS = "0000";
     const SECRET = "axion-remote-2026";
 
@@ -304,23 +304,18 @@
     async function pollBeacon() {
       if (!unlocked) return;
       try {
-        const token = BEACON.split("/").pop();
-        const apiUrl = "https://webhook.site/token/" + token + "/requests?sorting=newest&per_page=20";
-        const r = await fetch(apiUrl);
+        const r = await fetch(BEACON);
         if (!r.ok) throw new Error("beacon " + r.status);
         const j = await r.json();
-        const list = j.data || [];
+        const list = j.hosts || [];
         let added = 0;
-        for (const req of list) {
-          try {
-            const body = typeof req.content === "string" ? JSON.parse(req.content) : req.content;
-            if (body && body.id && body.secret === SECRET) {
-              if (!machines[body.id] || machines[body.id].ts !== body.ts) {
-                addMachine(body);
-                added++;
-              }
+        for (const body of list) {
+          if (body && body.id) {
+            if (!machines[body.id] || machines[body.id].ts !== body.ts) {
+              addMachine(body);
+              added++;
             }
-          } catch (e) {}
+          }
         }
         if (added) log("new signals: " + added);
         else log("scan ok · " + Object.keys(machines).length + " host(s)");
