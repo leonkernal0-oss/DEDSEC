@@ -2,46 +2,30 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title>AXION // REMOTE</title>
   <style>
-    :root {
-      --bg: #050507; --panel: #0c0c10; --border: #1a1a22;
-      --accent: #00ff9d; --text: #c8c8d0; --dim: #5a5a68; --danger: #ff3b5c;
-    }
+    :root { --bg:#050507; --panel:#0c0c10; --border:#1a1a22; --accent:#00ff9d; --text:#c8c8d0; --dim:#5a5a68; --danger:#ff3b5c; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
-      background: var(--bg); color: var(--text); min-height: 100vh; font-size: 13px;
-    }
-    header {
-      padding: 14px 16px; border-bottom: 1px solid var(--border);
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    header h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.12em; color: var(--accent); }
+    body { font-family: "SF Mono", Consolas, monospace; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 13px; }
+    header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 14px; letter-spacing: .12em; color: var(--accent); }
     header span { color: var(--dim); font-size: 11px; }
-    .wrap { max-width: 900px; margin: 0 auto; padding: 12px; }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 12px; }
     .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
-    .panel h2 { font-size: 11px; color: var(--dim); letter-spacing: 0.1em; margin-bottom: 10px; text-transform: uppercase; }
-    input, textarea {
-      width: 100%; background: #08080c; border: 1px solid var(--border); color: var(--text);
-      padding: 8px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; margin-bottom: 8px;
-    }
-    button {
-      background: transparent; border: 1px solid var(--accent); color: var(--accent);
-      padding: 7px 12px; border-radius: 4px; font-family: inherit; font-size: 11px;
-      cursor: pointer; letter-spacing: 0.06em; text-transform: uppercase;
-    }
+    .panel h2 { font-size: 11px; color: var(--dim); letter-spacing: .1em; margin-bottom: 10px; text-transform: uppercase; }
+    input, textarea { width: 100%; background: #08080c; border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; margin-bottom: 8px; }
+    button { background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 7px 12px; border-radius: 4px; font-family: inherit; font-size: 11px; cursor: pointer; letter-spacing: .06em; text-transform: uppercase; }
     button.ghost { border-color: var(--border); color: var(--dim); }
+    button.danger { border-color: var(--danger); color: var(--danger); }
     .row { display: flex; gap: 6px; flex-wrap: wrap; }
-    .row button { flex: 1; min-width: 70px; }
-    #screen, #cam { width: 100%; background: #000; border: 1px solid var(--border); border-radius: 4px; min-height: 180px; object-fit: contain; touch-action: none; cursor: crosshair; }
-    iframe.view { width: 100%; height: 420px; border: 1px solid var(--border); border-radius: 4px; background: #000; }
+    .row button { flex: 1; min-width: 90px; }
+    #screen { width: 100%; background: #000; border: 1px solid var(--border); border-radius: 4px; min-height: 180px; object-fit: contain; touch-action: none; cursor: crosshair; }
     .machine { border: 1px solid var(--border); border-radius: 4px; padding: 10px; margin-bottom: 8px; cursor: pointer; }
-    .machine:hover, .machine.active { border-color: var(--accent); }
+    .machine:hover { border-color: var(--accent); }
     .machine .name { color: var(--accent); font-weight: 600; }
     .machine .meta { color: var(--dim); font-size: 11px; margin-top: 3px; word-break: break-all; }
-    pre { background: #08080c; border: 1px solid var(--border); border-radius: 4px; padding: 8px; font-size: 11px; max-height: 220px; overflow: auto; white-space: pre-wrap; color: #8a8a98; }
+    pre { background: #08080c; border: 1px solid var(--border); border-radius: 4px; padding: 8px; font-size: 11px; max-height: 200px; overflow: auto; white-space: pre-wrap; color: #8a8a98; }
     .tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
     .tab { flex: 1; min-width: 70px; text-align: center; padding: 7px; border: 1px solid var(--border); border-radius: 4px; color: var(--dim); cursor: pointer; font-size: 11px; }
     .tab.active { border-color: var(--accent); color: var(--accent); }
@@ -49,8 +33,9 @@
     .log { font-size: 11px; color: var(--dim); max-height: 90px; overflow-y: auto; margin-top: 8px; }
     #lock { position: fixed; inset: 0; background: #050507; display: flex; align-items: center; justify-content: center; z-index: 99; }
     #lock .box { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 24px; width: 280px; text-align: center; }
-    #lock h2 { color: var(--accent); letter-spacing: 0.15em; margin-bottom: 16px; font-size: 13px; }
+    #lock h2 { color: var(--accent); letter-spacing: .15em; margin-bottom: 16px; font-size: 13px; }
     .port { display: inline-block; border: 1px solid var(--accent); color: var(--accent); padding: 4px 8px; margin: 3px; border-radius: 4px; font-size: 11px; }
+    .hint { color: var(--dim); font-size: 11px; margin-bottom: 8px; line-height: 1.4; }
   </style>
 </head>
 <body>
@@ -68,6 +53,16 @@
   </header>
   <div class="wrap">
     <div class="panel">
+      <h2>download agent</h2>
+      <div class="hint">paste your ngrok token, download agent.py, then run the admin .bat (python stays open). or build an exe on that PC with the third file.</div>
+      <input id="tok" placeholder="ngrok authtoken" />
+      <div class="row">
+        <button onclick="dlPy()">Download agent.py</button>
+        <button class="ghost" onclick="dlBat()">Download run-admin.bat</button>
+        <button class="ghost" onclick="dlExeBat()">Download build-exe.bat</button>
+      </div>
+    </div>
+    <div class="panel">
       <h2>live signals</h2>
       <div class="row">
         <button onclick="pollBeacon()">Refresh</button>
@@ -77,52 +72,46 @@
     </div>
     <div class="panel">
       <h2>detected hosts</h2>
-      <div id="machines"><div style="color:var(--dim);font-size:11px">scanning for signals...</div></div>
+      <div id="machines"><div style="color:var(--dim);font-size:11px">waiting for agent.py...</div></div>
     </div>
     <div id="control" class="hidden">
       <div class="tabs">
         <div class="tab active" data-t="screen">Desktop</div>
-        <div class="tab" data-t="term">Terminal</div>
-        <div class="tab" data-t="vnc">noVNC</div>
         <div class="tab" data-t="ports">Ports</div>
-        <div class="tab" data-t="cam">Camera</div>
         <div class="tab" data-t="sys">Shell</div>
+        <div class="tab" data-t="power">Power</div>
       </div>
       <div id="p-screen" class="panel">
-        <div id="deskMeta" style="color:var(--dim);font-size:11px;margin-bottom:6px">tap image to click</div>
+        <div id="deskMeta" class="hint">tap image to click</div>
         <img id="screen" />
         <div class="row" style="margin-top:8px">
           <button onclick="grabScreen()">Refresh</button>
           <button class="ghost" id="autoBtn" onclick="toggleAuto()">Live Off</button>
         </div>
-      </div>
-      <div id="p-term" class="panel hidden">
-        <div class="row" style="margin-bottom:8px">
-          <button onclick="openTerm()">Open tab</button>
+        <input id="typeBox" placeholder="type text to send" />
+        <div class="row">
+          <button onclick="sendText()">Send text</button>
+          <button class="ghost" onclick="key('enter')">Enter</button>
+          <button class="ghost" onclick="key('escape')">Esc</button>
         </div>
-        <iframe id="termFrame" class="view" title="ttyd"></iframe>
-      </div>
-      <div id="p-vnc" class="panel hidden">
-        <div class="row" style="margin-bottom:8px">
-          <button onclick="openVnc()">Open tab</button>
-        </div>
-        <iframe id="vncFrame" class="view" title="noVNC"></iframe>
       </div>
       <div id="p-ports" class="panel hidden">
-        <button onclick="scanPorts()">Scan open ports</button>
-        <div id="portBox" style="margin-top:10px;color:var(--dim)">click scan after the host is connected</div>
-      </div>
-      <div id="p-cam" class="panel hidden">
-        <img id="cam" />
-        <div class="row" style="margin-top:8px"><button onclick="grabCam()">Snapshot</button></div>
+        <button onclick="scanPorts()">Scan this PC</button>
+        <div id="portBox" class="hint" style="margin-top:10px">scans localhost common ports on the connected device</div>
       </div>
       <div id="p-sys" class="panel hidden">
-        <div class="row">
-          <button onclick="getInfo()">Info</button>
-        </div>
-        <textarea id="ps" rows="2" placeholder="command (powershell on Windows, bash on Mac/Linux)"></textarea>
+        <button onclick="getInfo()">Info</button>
+        <textarea id="ps" rows="2" placeholder="powershell on Windows, bash on Mac/Linux"></textarea>
         <button onclick="runPS()">Execute</button>
         <pre id="out">_</pre>
+      </div>
+      <div id="p-power" class="panel hidden">
+        <div class="hint">these run on the connected PC. confirm twice.</div>
+        <div class="row">
+          <button class="danger" onclick="power('sleep')">Sleep</button>
+          <button class="danger" onclick="power('restart')">Restart</button>
+          <button class="danger" onclick="power('shutdown')">Shutdown</button>
+        </div>
       </div>
     </div>
   </div>
@@ -130,9 +119,10 @@
     const BEACON = "/api/beacon";
     const PAGE_PASS = "0000";
     const SECRET = "axion-remote-2026";
-    let base = null, termUrl = "", vncUrl = "", autoT = null, machines = {}, unlocked = false, deskW = 1920, deskH = 1080;
+    let base = null, autoT = null, machines = {}, unlocked = false, deskW = 1920, deskH = 1080;
 
     setInterval(() => { document.getElementById("clock").textContent = new Date().toLocaleTimeString(); }, 1000);
+    document.getElementById("tok").value = localStorage.getItem("ngrokTok") || "";
 
     function tryUnlock() {
       if (document.getElementById("pw").value === PAGE_PASS) {
@@ -140,7 +130,7 @@
         document.getElementById("lock").style.display = "none";
         log("access granted");
         pollBeacon();
-        setInterval(pollBeacon, 10000);
+        setInterval(pollBeacon, 8000);
       } else document.getElementById("pwErr").style.display = "block";
     }
     document.getElementById("pw").addEventListener("keydown", e => { if (e.key === "Enter") tryUnlock(); });
@@ -160,70 +150,114 @@
       };
     });
 
+    function saveTok() {
+      const t = document.getElementById("tok").value.trim();
+      localStorage.setItem("ngrokTok", t);
+      return t;
+    }
+    function dl(name, text) {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([text], { type: "application/octet-stream" }));
+      a.download = name;
+      a.click();
+    }
+    async function dlPy() {
+      const token = saveTok();
+      if (!token) { log("paste ngrok token first"); return; }
+      try {
+        const r = await fetch("agent.py?t=" + Date.now());
+        if (!r.ok) throw new Error(r.status);
+        let src = await r.text();
+        src = src.replace(/NGROK_TOKEN\s*=\s*".*?"/, 'NGROK_TOKEN = "' + token.replace(/"/g, "") + '"');
+        dl("agent.py", src);
+        log("downloaded agent.py with your token");
+      } catch (e) {
+        log("download fail · " + e.message);
+      }
+    }
+    function dlBat() {
+      dl("run-admin.bat", [
+        "@echo off",
+        "cd /d \"%~dp0\"",
+        "net session >nul 2>&1",
+        "if %errorLevel% neq 0 (",
+        "  powershell -NoProfile -Command \"Start-Process -FilePath '%~f0' -Verb RunAs\"",
+        "  exit /b",
+        ")",
+        "where python >nul 2>&1",
+        "if errorlevel 1 (",
+        "  echo Install Python from python.org and tick Add to PATH",
+        "  pause",
+        "  exit /b 1",
+        ")",
+        "python -m pip install pillow pyautogui -q",
+        "echo Starting agent — do not close this window",
+        "python \"%~dp0agent.py\"",
+        "pause",
+        ""
+      ].join("\r\n"));
+      log("downloaded run-admin.bat");
+    }
+    function dlExeBat() {
+      dl("build-exe.bat", [
+        "@echo off",
+        "cd /d \"%~dp0\"",
+        "python -m pip install pyinstaller pillow pyautogui",
+        "python -m PyInstaller --onefile --uac-admin --name AxionAgent agent.py",
+        "echo EXE is dist\\AxionAgent.exe — run that as Administrator",
+        "pause",
+        ""
+      ].join("\r\n"));
+      log("downloaded build-exe.bat");
+    }
+
     async function api(path, method="GET", body=null) {
-      if (!base) throw new Error("no api url");
-      const opts = {
-        method,
-        headers: { "X-Secret": SECRET, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" }
-      };
+      if (!base) throw new Error("no host");
+      const opts = { method, headers: { "X-Secret": SECRET, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" } };
       if (body) opts.body = JSON.stringify(body);
       const r = await fetch(base + path, opts);
       if (!r.ok) throw new Error(r.status);
       return r.json();
     }
 
-    function setTarget(apiUrl, tUrl, vUrl) {
-      base = apiUrl ? apiUrl.replace(/\/$/, "") : "";
-      termUrl = tUrl || "";
-      vncUrl = vUrl || "";
+    function setTarget(url) {
+      if (!url) { log("host has no public url yet — wait for ngrok in the agent window"); return; }
+      base = url.replace(/\/$/, "");
       document.getElementById("control").classList.remove("hidden");
-      log("linked api=" + (base || "(none)") + " term=" + (termUrl || "(none)"));
-      if (termUrl) document.getElementById("termFrame").src = termUrl;
-      if (vncUrl) document.getElementById("vncFrame").src = vncUrl.replace(/\/$/, "") + "/vnc.html?autoconnect=1&resize=remote";
-      if (base) { grabScreen(); if (!autoT) toggleAuto(); }
+      log("linked " + base);
+      grabScreen();
+      if (!autoT) toggleAuto();
     }
     window.setTarget = setTarget;
 
-    function openTerm() { if (termUrl) window.open(termUrl, "_blank"); else log("no ttyd url yet"); }
-    function openVnc() { if (vncUrl) window.open(vncUrl.replace(/\/$/, "") + "/vnc.html?autoconnect=1", "_blank"); else log("no noVNC url yet"); }
-
-    function clearHosts() { machines = {}; renderMachines(); log("cleared"); }
+    function clearHosts() { machines = {}; renderMachines(); }
 
     function renderMachines() {
       const box = document.getElementById("machines");
       const ids = Object.keys(machines);
       if (!ids.length) {
-        box.innerHTML = '<div style="color:var(--dim);font-size:11px">scanning for signals...</div>';
+        box.innerHTML = '<div style="color:var(--dim);font-size:11px">waiting for agent.py...</div>';
         return;
       }
       box.innerHTML = ids.map(id => {
         const m = machines[id];
-        const apiU = m.api_url || m.public_url || "";
-        const tU = m.term_url || "";
-        const vU = m.vnc_url || "";
-        return `<div class="machine" onclick="setTarget('${apiU}','${tU}','${vU}')">
+        const u = m.api_url || m.public_url || "";
+        return `<div class="machine" onclick="setTarget('${u}')">
           <div class="name">${m.hostname || id} · ${m.os || "?"}</div>
-          <div class="meta">${m.user || "?"} · ${m.local_ip || "?"}<br>term ${tU || "(waiting)"}<br>api ${apiU || "(waiting)"}</div>
+          <div class="meta">${m.user || "?"} · ${u || "(waiting ngrok)"}</div>
         </div>`;
       }).join("");
-    }
-
-    function addMachine(data) {
-      if (!data || !data.id) return;
-      machines[data.id] = data;
-      renderMachines();
-      log("signal · " + (data.hostname || data.id));
     }
 
     async function pollBeacon() {
       if (!unlocked) return;
       try {
-        const r = await fetch(BEACON);
-        const j = await r.json();
-        for (const body of (j.hosts || [])) {
-          if (body && body.id && (!machines[body.id] || machines[body.id].ts !== body.ts)) addMachine(body);
+        const j = await (await fetch(BEACON)).json();
+        for (const b of (j.hosts || [])) {
+          if (b && b.id) { machines[b.id] = b; }
         }
-        log("scan ok · " + Object.keys(machines).length + " host(s)");
+        renderMachines();
+        log("hosts " + Object.keys(machines).length);
       } catch (e) { log("beacon fail · " + e.message); }
     }
 
@@ -235,13 +269,6 @@
         if (j.img) document.getElementById("screen").src = "data:image/jpeg;base64," + j.img;
       } catch (e) { log("screen fail · " + e.message); }
     }
-    async function grabCam() {
-      try {
-        const j = await api("/camera");
-        if (j.img) document.getElementById("cam").src = "data:image/jpeg;base64," + j.img;
-        else log("camera unavailable");
-      } catch (e) { log("cam fail · " + e.message); }
-    }
     function toggleAuto() {
       const btn = document.getElementById("autoBtn");
       if (autoT) { clearInterval(autoT); autoT = null; btn.textContent = "Live Off"; }
@@ -252,12 +279,18 @@
       const r = e.target.getBoundingClientRect();
       const x = Math.round(((e.clientX - r.left) / r.width) * deskW);
       const y = Math.round(((e.clientY - r.top) / r.height) * deskH);
-      try { await api("/mouse", "POST", { action: "click", x, y, button: e.button === 2 ? "right" : "left" }); setTimeout(grabScreen, 250); }
+      try { await api("/mouse", "POST", { x, y, button: e.button === 2 ? "right" : "left" }); setTimeout(grabScreen, 200); }
       catch (err) { log("click fail · " + err.message); }
     });
+    async function sendText() {
+      const t = document.getElementById("typeBox").value;
+      if (!t) return;
+      try { await api("/keyboard", "POST", { text: t }); log("text sent"); } catch (e) { log(e.message); }
+    }
+    async function key(k) { try { await api("/keyboard", "POST", { key: k }); } catch (e) { log(e.message); } }
     async function getInfo() {
       try { document.getElementById("out").textContent = JSON.stringify(await api("/info"), null, 2); }
-      catch (e) { log("fail · " + e.message); }
+      catch (e) { log(e.message); }
     }
     async function runPS() {
       const cmd = document.getElementById("ps").value.trim();
@@ -265,20 +298,24 @@
       try {
         const j = await api("/shell", "POST", { cmd });
         document.getElementById("out").textContent = (j.stdout || "") + (j.stderr ? "\n" + j.stderr : "") + (j.error || "") || "(empty)";
-      } catch (e) { log("fail · " + e.message); }
+      } catch (e) { log(e.message); }
     }
     async function scanPorts() {
       const box = document.getElementById("portBox");
-      box.textContent = "scanning this device...";
+      box.textContent = "scanning...";
       try {
         const j = await api("/ports");
         const ports = j.open || [];
-        if (!ports.length) { box.textContent = "no scanned ports open"; return; }
-        box.innerHTML = ports.map(p => '<span class="port">' + p + "</span>").join("") +
-          '<div style="margin-top:8px;color:var(--dim)">host ' + (j.host || "127.0.0.1") + " · " + (j.os || "") + "</div>";
-      } catch (e) {
-        box.textContent = "scan fail · " + e.message;
-      }
+        box.innerHTML = ports.length ? ports.map(p => '<span class="port">'+p+"</span>").join("") : "none open";
+      } catch (e) { box.textContent = "fail · " + e.message; }
+    }
+    async function power(action) {
+      if (!confirm(action.toUpperCase() + " this PC?")) return;
+      if (!confirm("Really " + action + "?")) return;
+      try {
+        const j = await api("/power", "POST", { action });
+        log(JSON.stringify(j));
+      } catch (e) { log("power fail · " + e.message); }
     }
   </script>
 </body>
