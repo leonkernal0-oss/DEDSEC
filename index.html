@@ -20,7 +20,7 @@
     button.danger { border-color: var(--danger); color: var(--danger); }
     .row { display: flex; gap: 6px; flex-wrap: wrap; }
     .row button { flex: 1; min-width: 90px; }
-    #screen { width: 100%; background: #000; border: 1px solid var(--border); border-radius: 4px; min-height: 180px; object-fit: contain; touch-action: none; cursor: crosshair; }
+    #screen { width: 100%; background: #000; border: 1px solid var(--border); border-radius: 4px; min-height: 180px; display: block; touch-action: none; cursor: crosshair; }
     .machine { border: 1px solid var(--border); border-radius: 4px; padding: 10px; margin-bottom: 8px; cursor: pointer; }
     .machine:hover { border-color: var(--accent); }
     .machine .name { color: var(--accent); font-weight: 600; }
@@ -83,15 +83,13 @@
       </div>
       <div id="p-screen" class="panel">
         <div id="deskMeta" class="hint">connecting…</div>
-        <img id="screen" />
+        <canvas id="screen"></canvas>
         <div class="row" style="margin-top:8px">
           <button onclick="grabScreen()">Refresh</button>
           <button class="ghost" id="autoBtn" onclick="toggleAuto()">Live Off</button>
-          <select id="fpsSel" style="width:auto;margin:0;background:#08080c;border:1px solid var(--border);color:var(--text);padding:7px;border-radius:4px;font-family:inherit;font-size:11px">
-            <option value="5">5 fps</option>
-            <option value="10" selected>10 fps</option>
-            <option value="15">15 fps</option>
-            <option value="20">20 fps</option>
+          <select id="modeSel" style="width:auto;margin:0;background:#08080c;border:1px solid var(--border);color:var(--text);padding:7px;border-radius:4px;font-family:inherit;font-size:11px">
+            <option value="push" selected>Push (smooth)</option>
+            <option value="pull">Pull (compat)</option>
           </select>
         </div>
         <div class="hint" style="margin-top:6px">mouse move · click · drag · right-click · wheel — keyboard when the desktop has focus. Esc releases keys.</div>
@@ -197,7 +195,7 @@
         "  pause",
         "  exit /b 1",
         ")",
-        "python -m pip install pillow mss pyautogui -q",
+        "python -m pip install pillow mss pyautogui numpy -q",
         "echo Starting agent — do not close this window",
         "python \"%~dp0agent.py\"",
         "pause",
@@ -209,7 +207,7 @@
       dl("build-exe.bat", [
         "@echo off",
         "cd /d \"%~dp0\"",
-        "python -m pip install pyinstaller pillow mss pyautogui",
+        "python -m pip install pyinstaller pillow mss pyautogui numpy",
         "python -m PyInstaller --onefile --uac-admin --name AxionAgent agent.py",
         "echo EXE is dist\\AxionAgent.exe — run that as Administrator",
         "pause",
@@ -232,12 +230,31 @@
       base = url.replace(/\/$/, "");
       document.getElementById("control").classList.remove("hidden");
       log("linked " + base);
-      grabScreen();
-      if (!autoT) toggleAuto();
-      // probe agent version — old agents don't have /latest or /input
-      api("/latest").then(() => log("agent stream API ok")).catch(() => log("old agent detected — re-download agent.py for smooth streaming"));
+      measureRtt().then(() => {
+        grabScreen();
+        if (!autoT) toggleAuto();
+      });
+      // probe agent version (new agents answer /latest with raw image/jpeg)
+      fetch(base + "/latest", { headers: streamHeaders(), cache: "no-store" })
+        .then(r => {
+          const ct = r.headers.get("Content-Type") || "";
+          if (ct.includes("image/")) log("agent 60fps stream API ok");
+          else log("agent streaming API ok — re-download agent.py for 60fps push");
+        })
+        .catch(() => log("old agent detected — re-download agent.py for smooth streaming"));
     }
     window.setTarget = setTarget;
+
+    // ---- link latency probe: feeds the agent's bandwidth governor ---------
+    let lastRtt = 0;
+    async function measureRtt() {
+      if (!base) return 0;
+      const t0 = performance.now();
+      try { await fetch(base + "/ping", { headers: { "ngrok-skip-browser-warning": "true" }, cache: "no-store" }); }
+      catch (e) { return lastRtt; }
+      lastRtt = Math.round(performance.now() - t0);
+      return lastRtt;
+    }
 
     // ---- low-latency input: batched event queue -> POST /input -------------
     let evQ = [], flushT = null, lastSentMove = null;
@@ -367,23 +384,147 @@
       } catch (e) { log("beacon fail · " + e.message); }
     }
 
-    // ---- live view: adaptive pull loop (agent caches frames at ~15fps) ------
-    let pulling = false, lastSeq = -1, fpsCount = 0, fpsT0 = performance.now(), backoff = 0;
-    function targetFps() { return parseInt(document.getElementById("fpsSel").value || "10", 10); }
+    // ---- live view ----------------------------------------------------------
+    // Push mode (default): ONE persistent MJPEG connection (/stream). Frames
+    //   arrive as soon as the agent publishes them — no per-frame HTTP round
+    //   trips, so we can render up to 60fps. JPEGs are decoded via Blob URLs
+    //   and painted onto a canvas in arrival order (latest wins).
+    // Pull mode (compat): adaptive fetch loop against /latest.
+    const cv = document.getElementById("screen");
+    const ctx = cv.getContext("2d", { alpha: false });
+    let pendingBlobs = [];   // FIFO of object URLs awaiting decode
+    function showFrame(buf) {
+      const url = URL.createObjectURL(new Blob([buf], { type: "image/jpeg" }));
+      pendingBlobs.push(url);
+      if (pendingBlobs.length > 4) revokeOld(pendingBlobs.splice(0, pendingBlobs.length - 4));
+      nextFrame();
+    }
+    function revokeOld(list) { list.forEach(u => { try { URL.revokeObjectURL(u); } catch (e) {} }); }
+    function nextFrame() {
+      if (!drawing && pendingBlobs.length) drawOne(pendingBlobs.shift());
+    }
+    let drawing = false;
+    function drawOne(url) {
+      drawing = true;
+      const img = new Image();
+      img.onload = () => {
+        if (cv.width !== img.naturalWidth || cv.height !== img.naturalHeight) {
+          cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+          deskW = screenW || deskW; deskH = screenH || deskH;
+        }
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        drawing = false;
+        countFrame();
+        nextFrame();               // drain backlog toward newest
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); drawing = false; nextFrame(); };
+      img.src = url;
+    }
 
+    function streamHeaders() {
+      return { "X-Secret": SECRET, "ngrok-skip-browser-warning": "true" };
+    }
+
+    let fpsCount = 0, fpsT0 = performance.now(), lastFpsShown = 0, screenW = 0, screenH = 0;
+    function countFrame() {
+      fpsCount++;
+      const now = performance.now();
+      if (now - fpsT0 >= 1000) {
+        lastFpsShown = Math.round(fpsCount * 1000 / (now - fpsT0));
+        document.getElementById("deskMeta").textContent =
+          (screenW ? screenW + "x" + screenH : "") + " · " + lastFpsShown + " fps · " +
+          (mode === "push" ? "push" : "pull") + " · rtt " + lastRtt + "ms · move/click/drag/keys";
+        fpsCount = 0; fpsT0 = now;
+      }
+    }
+
+    // ---------- push (MJPEG over fetch with auto-degrade) ----------
+    let mjpegCtrl = null;
+    async function startPush() {
+      if (!base || !autoT) return;
+      if (mjpegCtrl) return;               // already streaming
+      mjpegCtrl = new AbortController();
+      const myCtrl = mjpegCtrl;
+      const url = base + "/stream?rtt=" + (lastRtt || 50);
+      try {
+        const resp = await fetch(url, { headers: streamHeaders(), signal: myCtrl.signal, cache: "no-store" });
+        if (!resp.ok || !resp.body) throw new Error("status " + resp.status);
+        const rd = resp.body.getReader();
+        let buf = new Uint8Array(0), contentLen = -1;
+        while (autoT && mode === "push") {
+          const { done, value } = await rd.read();
+          if (done) break;
+          if (value) {
+            const nb = new Uint8Array(buf.length + value.length);
+            nb.set(buf); nb.set(value, buf.length);
+            buf = nb;
+          }
+          // parse multipart parts out of the rolling buffer
+          for (;;) {
+            if (contentLen < 0) {
+              const hend = bIndexOf(buf, "\r\n\r\n");
+              if (hend < 0) break;
+              const head = new TextDecoder().decode(buf.subarray(0, hend));
+              const m = head.match(/Content-Length:\s*(\d+)/i);
+              contentLen = m ? parseInt(m[1], 10) : 0;
+              const sm = head.match(/X-Desk-W:\s*(\d+)/i), shm = head.match(/X-Desk-H:\s*(\d+)/i);
+              if (sm) screenW = parseInt(sm[1], 10);
+              if (shm) screenH = parseInt(shm[1], 10);
+              buf = buf.subarray(hend + 4);
+              continue;
+            }
+            if (buf.length < contentLen + 2) break;   // wait for full frame + CRLF
+            const jpg = buf.slice(0, contentLen);
+            buf = buf.subarray(contentLen + 2);
+            contentLen = -1;
+            if (jpg.length > 3) showFrame(jpg.buffer);
+          }
+          if (buf.length > 8 << 20) buf = buf.slice(-1 << 20); // runaway guard
+        }
+      } catch (e) {
+        if (String(e.name || e.message || e).toLowerCase().includes("abort")) return;
+        log("push fail · " + (e.message || e) + " → pull mode");
+      } finally {
+        if (mjpegCtrl === myCtrl) mjpegCtrl = null;
+      }
+      // graceful degrade: if push died (old agent / proxy buffering), use pull
+      if (autoT && base && mode === "push") { mode = "pull"; startPull(); }
+    }
+    function bIndexOf(u8, s) {
+      const t = new TextEncoder().encode(s);
+      outer: for (let i = 0; i + t.length <= u8.length; i++) {
+        for (let j = 0; j < t.length; j++) if (u8[i + j] !== t[j]) continue outer;
+        return i;
+      }
+      return -1;
+    }
+    function stopPush() {
+      if (mjpegCtrl) { try { mjpegCtrl.abort(); } catch (e) {} mjpegCtrl = null; }
+    }
+
+    // ---------- pull (adaptive /latest loop, raw jpeg) ----------
+    let pulling = false, backoff = 0;
     async function grabScreen() {
       if (!base) return;
       try {
-        const j = await api("/latest");
-        if (j.w) deskW = j.w; if (j.h) deskH = j.h;
-        if (j.img) document.getElementById("screen").src = "data:image/jpeg;base64," + j.img;
-        if (typeof j.seq === "number") lastSeq = j.seq;
-        fpsCount++;
-        const now = performance.now();
-        if (now - fpsT0 > 1000) {
-          document.getElementById("deskMeta").textContent =
-            deskW + "x" + deskH + " · " + Math.round(fpsCount * 1000 / (now - fpsT0)) + " fps · move/click/drag/keys";
-          fpsCount = 0; fpsT0 = now;
+        const r = await fetch(base + "/latest", { headers: streamHeaders(), cache: "no-store" });
+        const ct = (r.headers.get("Content-Type") || "");
+        if (ct.includes("application/json")) {
+          // old agent: base64 json payload
+          const j = await r.json();
+          if (j.w) screenW = deskW = j.w; if (j.h) screenH = deskH = j.h;
+          if (j.img) {
+            const bin = atob(j.img); const u8 = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+            showFrame(u8.buffer);
+          }
+        } else {
+          const hdrW = parseInt(r.headers.get("X-Desk-W") || "0", 10);
+          const hdrH = parseInt(r.headers.get("X-Desk-H") || "0", 10);
+          if (hdrW) { screenW = deskW = hdrW; screenH = deskH = hdrH; }
+          const ab = await r.arrayBuffer();
+          showFrame(ab);
         }
         backoff = 0;
       } catch (e) {
@@ -391,24 +532,37 @@
         log("screen fail · " + e.message);
       }
     }
-
-    async function pullLoop() {
-      while (autoT && base) {
+    async function startPull() {
+      stopPush();
+      if (pulling) return;
+      pulling = true;
+      while (autoT && base && mode === "pull") {
         const t0 = performance.now();
         await grabScreen();
         const dt = performance.now() - t0;
-        const interval = Math.max(50, 1000 / targetFps() - dt) + backoff;
+        // pull as fast as the link allows, min 16ms spacing (~60fps ceiling)
+        const interval = Math.max(16, Math.min(dt, 200)) + backoff;
         await new Promise(res => setTimeout(res, interval));
       }
+      pulling = false;
     }
+
+    let mode = "push";
+    document.getElementById("modeSel").addEventListener("change", e => {
+      mode = e.target.value;
+      if (autoT) { stopPush(); if (mode === "push") startPush(); else startPull(); }
+    });
 
     function toggleAuto() {
       const btn = document.getElementById("autoBtn");
-      if (autoT) { autoT = null; btn.textContent = "Live Off"; }
-      else {
+      if (autoT) {
+        autoT = false;
+        stopPush();
+        btn.textContent = "Live Off";
+      } else {
         autoT = true;
         btn.textContent = "Live On";
-        pullLoop();
+        if (mode === "push") startPush(); else startPull();
       }
     }
     async function sendText() {

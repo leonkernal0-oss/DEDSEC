@@ -68,10 +68,13 @@ def ensure_deps():
         pyautogui.FAILSAFE = False
         pyautogui.PAUSE = 0
         log("deps ok")
-        return
     except Exception as e:
         log("installing pillow mss pyautogui because", e)
         pip_install("pillow", "mss", "pyautogui")
+    try:
+        import numpy  # noqa: F401  (optional: vectorized frame diff for 60fps)
+    except Exception:
+        pip_install("numpy")  # agent still works without it (pillow fallback)
 
 
 def ensure_ngrok():
@@ -129,20 +132,32 @@ def start_ngrok(ngrok):
 
 
 # ---------------------------------------------------------------------------
-# Screen streaming — a background thread continuously grabs the desktop,
-# skips frames that haven't changed (dirty-rect diff) and keeps only the
-# newest JPEG in a shared slot. Clients read it at up to STREAM_FPS via
-# /stream (multipart MJPEG push) or /screen (single-shot poll).
+# Screen streaming — a background thread continuously grabs the desktop at
+# up to 60 fps, vectorized-diffs downscaled frames (numpy fast path, pure
+# Pillow fallback), and publishes every changed frame into a short ring
+# buffer. Viewers consume it over ONE persistent connection:
+#   GET /stream  -> multipart MJPEG push (no per-frame round trips)
+#   GET /latest  -> single cached frame (legacy pull / first paint)
+# Bandwidth governor: if frames grow too large for the link, resolution
+# and/or fps are reduced automatically so motion stays smooth instead of
+# turning into a slideshow.
 # ---------------------------------------------------------------------------
-STREAM_FPS = 15           # max frames per second pushed to viewers
-FRAME_W = 1280            # downscale long edge to this for bandwidth
-JPEG_Q_IDLE = 40          # quality when motion is low (smaller frames)
-JPEG_Q_MOTION = 62        # quality while there is lots of change
-DIRTY_THRESH = 3.2        # mean abs pixel diff above which we send a new frame
+STREAM_FPS = 60           # capture/publish target (auto-throttled by bw governor)
+FRAME_W = 1280            # starting downscale width (long edge)
+FRAME_W_MIN = 960         # lowest auto-downscale before dropping fps instead
+JPEG_Q = 50               # base JPEG quality
+DIRTY_THRESH = 0.006      # fraction of changed pixels (tiny-diff) to publish
+MAX_KBPS = 1600           # soft bandwidth cap; raised dynamically from RTT
+RING_LEN = 4              # keep last N published frames so viewers can drain
+                          #   bursts instead of freezing on "stuck" frames
 
 _stream_lock = threading.Lock()
-_stream_latest = {"jpg": None, "seq": 0}   # newest encoded frame
 _stream_event = threading.Event()          # signaled when a new frame lands
+_ring = []                                  # list of {"seq","jpg","t"} oldest->newest
+_seq_ctr = [0]
+_fb_bytes = [None]                          # last frame bytes (for numpy-less diff)
+_fb_t = [0.0]                               # when we last forced a full frame
+_bw = {"kbps": 0.0, "rtt_ms": 0.0, "frame_w": FRAME_W, "fps": STREAM_FPS}
 
 
 def _grab_pil():
@@ -164,10 +179,10 @@ def _grab_pil():
 _mss_inst = None
 
 
-def _downscale(img):
+def _downscale(img, width):
     w, h = img.size
-    if max(w, h) > FRAME_W:
-        s = FRAME_W / float(max(w, h))
+    if max(w, h) > width:
+        s = width / float(max(w, h))
         img = img.resize((int(w * s), int(h * s)))
     return img
 
@@ -178,61 +193,129 @@ def _encode(img, quality):
     return buf.getvalue()
 
 
+try:
+    import numpy as _np
+except Exception:
+    _np = None
+
+_prev_arr = [None]  # previous frame as uint8 array (numpy fast path)
+
+
+def _changed_frac(small):
+    """Fraction of pixels that differ from the previous frame. Vectorized
+    with numpy when available; otherwise a sampled Pillow-only estimate."""
+    if _np is not None:
+        a = _np.asarray(small, dtype=_np.uint8)
+        p = _prev_arr[0]
+        _prev_arr[0] = a
+        if p is None or p.shape != a.shape:
+            return 1.0
+        d = _np.abs(a.astype(_np.int16) - p.astype(_np.int16)).max(axis=2)
+        return float((d > 24).mean())
+    # fallback: compare against a saved 128x72 thumbnail, sampled
+    tiny = small.resize((128, 72))
+    tb = tiny.tobytes()
+    prev = _fb_bytes[0]
+    _fb_bytes[0] = tb
+    if prev is None or len(prev) != len(tb):
+        return 1.0
+    acc = 0
+    step = 5
+    n = 0
+    for i in range(0, len(tb), step):
+        d = tb[i] - prev[i]
+        acc += 1 if (d > 24 or d < -24) else 0
+        n += 1
+    return acc / float(n) if n else 1.0
+
+
 def stream_loop():
+    """Grab -> dirty-check -> encode -> publish, paced to _bw['fps'] with
+    adaptive back-pressure (drops work before falling behind)."""
     global screen_w, screen_h
-    prev_small = None
-    log("stream loop started @ %dfps target" % STREAM_FPS)
+    log("stream loop started @ %dfps target (%s)" % (STREAM_FPS, "numpy" if _np else "pillow-diff"))
     while True:
         t0 = time.time()
+        budget = 1.0 / max(1.0, _bw["fps"])
         try:
             img = _grab_pil()
             screen_w, screen_h = img.size
-            small = _downscale(img)
-            raw = small.tobytes()
-            changed = True
-            motion = 0.0
-            if prev_small is not None and len(prev_small) == len(raw):
-                # cheap dirty check on a tiny thumbnail (fast even on slow CPUs)
-                tiny_now = small.resize((64, 36))
-                tiny_b = tiny_now.tobytes()
-                acc = 0
-                for i in range(0, len(tiny_b), 7):  # sample ~1/7 of bytes
-                    d = tiny_b[i] - prev_small[i]
-                    acc += d if d >= 0 else -d
-                motion = acc / (len(range(0, len(tiny_b), 7)) * 255.0) * 100.0
-                changed = motion > DIRTY_THRESH
-            else:
-                tiny_now = small.resize((64, 36))
-            if changed:
-                q = JPEG_Q_MOTION if motion > 12 else JPEG_Q_IDLE
+            small = _downscale(img, _bw["frame_w"])
+            frac = _changed_frac(small)
+            now = time.time()
+            force = (now - _fb_t[0]) > 2.0     # periodic refresh so viewers
+            if frac >= DIRTY_THRESH or force:  #   self-heal from bad frames
+                _fb_t[0] = now
+                est = (frac * 0.25 + 0.01) * small.size[0] * small.size[1]
+                q = JPEG_Q if est <= MAX_KBPS * 125 else max(30, JPEG_Q - 12)
                 jpg = _encode(small, q)
                 with _stream_lock:
-                    _stream_latest["jpg"] = jpg
-                    _stream_latest["seq"] += 1
+                    _seq_ctr[0] += 1
+                    _ring.append({"seq": _seq_ctr[0], "jpg": jpg, "t": now})
+                    if len(_ring) > RING_LEN:
+                        del _ring[0:len(_ring) - RING_LEN]
                 _stream_event.set()
-                prev_small = tiny_now.tobytes()
+                kbps = len(jpg) * 8.0 * min(frac * 20.0 + 1.0, _bw["fps"]) / 1000.0
+                _bw["kbps"] = _bw["kbps"] * 0.85 + kbps * 0.15
+                _govern_bandwidth(len(jpg))
         except Exception as e:
             log("stream grab", e)
             time.sleep(0.5)
         dt = time.time() - t0
-        time.sleep(max(0.0, 1.0 / STREAM_FPS - dt))
-    # note: _stream_event cleared by consumers, see wait_frame()
+        if dt < budget * 0.9:
+            time.sleep(budget - dt)   # caught up: pace to target fps
+        elif dt > budget * 1.25:
+            _drop_fps()               # encoding can't keep up: shed fps
+
+
+def _drop_fps():
+    f = _bw["fps"]
+    if f > 24:
+        _bw["fps"] = 30
+    elif f > 15:
+        _bw["fps"] = 15
+
+
+def _govern_bandwidth(jpg_len):
+    """If sustained bitrate exceeds the link budget, lower resolution first,
+    then fps. Never starves: budget has a floor and drops are gradual."""
+    budget = max(500.0, min(MAX_KBPS, _bw.get("budget_kbps", MAX_KBPS)))
+    if _bw["kbps"] <= budget:
+        return
+    if _bw["frame_w"] > FRAME_W_MIN:
+        _bw["frame_w"] = FRAME_W_MIN
+        _fb_bytes[0] = None  # dimensions changed -> next diff forces a frame
+        log("bandwidth governor: res -> %dpx (kbps %.0f > %.0f)" % (_bw["frame_w"], _bw["kbps"], budget))
+    elif _bw["fps"] > 15:
+        _bw["fps"] = max(15, _bw["fps"] // 2)
+        log("bandwidth governor: fps -> %d" % _bw["fps"])
+
+
+def latest_frame():
+    """Newest published frame as (seq, jpeg_bytes) or (0, None)."""
+    with _stream_lock:
+        if not _ring:
+            return 0, None
+        f = _ring[-1]
+        return f["seq"], f["jpg"]
+
+
+def drain_frames(seq):
+    """All published frames newer than `seq`, oldest first (never blocks)."""
+    with _stream_lock:
+        return [f for f in _ring if f["seq"] > seq]
 
 
 def wait_frame(seq, timeout=25.0):
     """Block until a frame newer than `seq` exists; return (new_seq, jpeg)."""
     deadline = time.time() + timeout
-    while True:
-        _stream_event.wait(timeout=max(0.05, deadline - time.time()))
-        with _stream_lock:
-            cur = _stream_latest["seq"]
-            jpg = _stream_latest["jpg"]
-        if cur != seq and jpg is not None:
-            if cur == _stream_latest["seq"]:
-                _stream_event.clear()
-            return cur, jpg
-        if time.time() > deadline:
-            return None, None
+    while time.time() < deadline:
+        fs = drain_frames(seq)
+        if fs:
+            return fs[-1]["seq"], fs[-1]["jpg"]
+        _stream_event.wait(timeout=min(0.2, max(0.01, deadline - time.time())))
+        _stream_event.clear()
+    return None, None
 
 
 def capture_screen():
@@ -241,13 +324,26 @@ def capture_screen():
         img = _grab_pil()
         global screen_w, screen_h
         screen_w, screen_h = img.size
-        img = _downscale(img)
+        img = _downscale(img, FRAME_W)
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=60)
+        img.save(buf, format="JPEG", quality=JPEG_Q)
         return base64.b64encode(buf.getvalue()).decode()
     except Exception as e:
         log("screen", e)
         return None
+
+
+def measure_link(rtt_ms):
+    """Feed a client-measured round trip into the bandwidth governor.
+    Low RTT => more of MAX_KBPS is usable; high RTT => compress harder."""
+    rtt = max(5.0, min(float(rtt_ms), 3000.0))
+    _bw["rtt_ms"] = rtt
+    budget = MAX_KBPS * (1.0 - min(0.65, rtt / 2200.0))
+    _bw["budget_kbps"] = budget
+    # if the link got slow again and we're way over budget, shrink once
+    if _bw["kbps"] > budget and _bw["frame_w"] > FRAME_W_MIN:
+        _bw["frame_w"] = FRAME_W_MIN
+        _fb_bytes[0] = None
 
 
 def mouse_move(x, y):
@@ -580,21 +676,21 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"img": capture_screen(), "w": screen_w, "h": screen_h})
             return
         if path == "/latest":
-            # instant frame pull from the streamer's cache (no grab on this thread)
-            with _stream_lock:
-                jpg = _stream_latest["jpg"]
-                seq = _stream_latest["seq"]
+            # instant frame pull from the streamer's ring cache (no grab here)
+            seq, jpg = latest_frame()
             if jpg is None:
                 self._json({"img": capture_screen(), "w": screen_w, "h": screen_h})
                 return
-            body = b'{"img":"' + base64.b64encode(jpg) + b'","w":%d,"h":%d,"seq":%d}' % (screen_w, screen_h, seq)
             self.send_response(200)
             self._cors()
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", "image/jpeg")
             self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(body)))
+            self.send_header("X-Frame-Seq", str(seq))
+            self.send_header("X-Desk-W", str(screen_w))
+            self.send_header("X-Desk-H", str(screen_h))
+            self.send_header("Content-Length", str(len(jpg)))
             self.end_headers()
-            self.wfile.write(body)
+            self.wfile.write(jpg)
             return
         if path == "/stream":
             self._mjpeg()
@@ -608,8 +704,17 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"error": "not found"}, 404)
 
     def _mjpeg(self):
-        """Push MJPEG stream: server keeps the connection open and writes a
-        multipart body for every changed frame (up to STREAM_FPS)."""
+        """Push MJPEG stream: one persistent connection, every changed frame
+        written as soon as it is published (up to STREAM_FPS). Drain semantics
+        keep latency low: if the writer falls behind we skip stale frames but
+        always send a fresh full frame right after a skip (self-healing)."""
+        q = urlparse(self.path).query
+        try:
+            rtt = float(dict(pv.split("=", 1) for pv in q.split("&") if "=" in pv).get("rtt", "0"))
+            if rtt > 0:
+                measure_link(rtt)
+        except Exception:
+            pass
         self.send_response(200)
         self._cors()
         self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
@@ -619,13 +724,21 @@ class Handler(BaseHTTPRequestHandler):
         seq = 0
         try:
             while True:
-                s, jpg = wait_frame(seq)
-                if jpg is None:
-                    break  # timed out waiting — let client reconnect
-                seq = s
-                self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n" % len(jpg))
+                fs = drain_frames(seq)
+                if not fs:
+                    _stream_event.wait(timeout=0.25)
+                    _stream_event.clear()
+                    continue
+                # live viewing only needs the newest frame: drop stale ones,
+                # but never more than (RING_LEN-1) at a time so motion stays
+                # continuous instead of jumping.
+                f = fs[-1]
+                jpg = f["jpg"]
+                self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nX-Frame-Seq: %d\r\nX-Desk-W: %d\r\nX-Desk-H: %d\r\nX-Fps: %d\r\nContent-Length: %d\r\n\r\n" % (f["seq"], screen_w, screen_h, _bw["fps"], len(jpg)))
                 self.wfile.write(jpg)
                 self.wfile.write(b"\r\n")
+                self.wfile.flush()
+                seq = f["seq"]
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass
         except Exception as e:
