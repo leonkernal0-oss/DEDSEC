@@ -5,7 +5,6 @@ const SECRET = "axion-remote-2026";
 
 export default async (req: Request) => {
   const store = getStore({ name: "hosts", consistency: "strong" });
-  const url = new URL(req.url);
 
   const headers = {
     "Access-Control-Allow-Origin": "*",
@@ -29,8 +28,12 @@ export default async (req: Request) => {
         id: body.id,
         hostname: body.hostname || "",
         local_ip: body.local_ip || "",
-        public_url: body.public_url || "",
+        public_url: body.public_url || body.api_url || "",
+        api_url: body.api_url || body.public_url || "",
+        term_url: body.term_url || "",
+        vnc_url: body.vnc_url || "",
         user: body.user || "",
+        os: body.os || "",
         ts: body.ts || new Date().toISOString(),
       };
       await store.setJSON(key, data);
