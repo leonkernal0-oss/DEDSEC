@@ -289,38 +289,144 @@ def safe_path(p):
     return p
 
 
+def file_flags(path, name):
+    hidden = name.startswith(".")
+    system = False
+    if OS_NAME == "Windows":
+        try:
+            import ctypes
+            a = ctypes.windll.kernel32.GetFileAttributesW(str(path))
+            if a != -1:
+                if a & 2:
+                    hidden = True
+                if a & 4:
+                    system = True
+        except Exception:
+            pass
+    return hidden, system
+
+
+def list_drives():
+    drives = []
+    if OS_NAME == "Windows":
+        for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            d = c + ":\\"
+            if os.path.exists(d):
+                try:
+                    usage = shutil.disk_usage(d)
+                    drives.append({"path": d, "name": c + ":", "total": usage.total, "free": usage.free})
+                except Exception:
+                    drives.append({"path": d, "name": c + ":", "total": 0, "free": 0})
+    else:
+        drives.append({"path": "/", "name": "/", "total": 0, "free": 0})
+        if os.path.isdir(HOME):
+            drives.append({"path": HOME, "name": "Home", "total": 0, "free": 0})
+    return drives
+
+
 def list_dir(path):
     path = safe_path(path)
     if not os.path.isdir(path):
-        return {"ok": False, "error": "not a directory", "path": path}
+        return {"ok": False, "error": "not a directory", "path": path, "drives": list_drives()}
     items = []
     try:
-        names = os.listdir(path)
+        entries = list(os.scandir(path))
     except Exception as e:
-        return {"ok": False, "error": str(e), "path": path}
-    names = names[:800]
-    for name in names:
-        full = os.path.join(path, name)
+        return {"ok": False, "error": str(e), "path": path, "drives": list_drives()}
+    for ent in entries[:4000]:
         try:
-            st = os.stat(full)
+            st = ent.stat(follow_symlinks=False)
+            hidden, system = file_flags(ent.path, ent.name)
             items.append({
-                "name": name,
-                "path": full,
-                "dir": os.path.isdir(full),
+                "name": ent.name,
+                "path": ent.path,
+                "dir": ent.is_dir(follow_symlinks=False),
                 "size": int(st.st_size),
                 "mtime": int(st.st_mtime),
+                "hidden": hidden,
+                "system": system,
             })
         except Exception:
-            continue
+            items.append({
+                "name": ent.name,
+                "path": ent.path,
+                "dir": False,
+                "size": 0,
+                "mtime": 0,
+                "hidden": True,
+                "system": False,
+            })
     items.sort(key=lambda x: (not x["dir"], x["name"].lower()))
-    parent = os.path.dirname(path)
-    drives = []
-    if OS_NAME == "Windows":
-        for c in "CDEFGHIJKLMNOPQRSTUVWXYZ":
-            d = c + ":\\"
-            if os.path.exists(d):
-                drives.append(d)
-    return {"ok": True, "path": path, "parent": parent, "home": HOME, "drives": drives, "items": items}
+    parent = os.path.dirname(path.rstrip("\\/"))
+    if OS_NAME == "Windows" and len(path) <= 3:
+        parent = path
+    return {
+        "ok": True,
+        "path": path,
+        "parent": parent,
+        "home": HOME,
+        "drives": list_drives(),
+        "items": items,
+        "count": len(items),
+    }
+
+
+def read_text_file(path, max_bytes=400000):
+    path = safe_path(path)
+    if not os.path.isfile(path):
+        return {"ok": False, "error": "not a file"}
+    size = os.path.getsize(path)
+    raw = open(path, "rb").read(max_bytes + 1)
+    truncated = len(raw) > max_bytes
+    raw = raw[:max_bytes]
+    if b"\x00" in raw[:4096]:
+        return {"ok": True, "path": path, "name": os.path.basename(path), "binary": True, "size": size, "text": ""}
+    text = None
+    for enc in ("utf-8", "utf-16", "cp1252", "latin-1"):
+        try:
+            text = raw.decode(enc)
+            break
+        except Exception:
+            continue
+    if text is None:
+        text = raw.decode("latin-1", errors="replace")
+    return {
+        "ok": True,
+        "path": path,
+        "name": os.path.basename(path),
+        "binary": False,
+        "size": size,
+        "truncated": truncated,
+        "text": text,
+    }
+
+
+def search_files(root, query, limit=250):
+    root = safe_path(root)
+    query = (query or "").lower().strip()
+    if not query:
+        return {"ok": False, "error": "empty query"}
+    hits = []
+    t0 = time.time()
+    try:
+        for dirpath, dirnames, filenames in os.walk(root):
+            if time.time() - t0 > 8:
+                break
+            # include hidden dirs
+            for name in dirnames:
+                if query in name.lower():
+                    hits.append({"name": name, "path": os.path.join(dirpath, name), "dir": True})
+                    if len(hits) >= limit:
+                        return {"ok": True, "q": query, "root": root, "items": hits, "more": True}
+            for name in filenames:
+                if query in name.lower():
+                    hits.append({"name": name, "path": os.path.join(dirpath, name), "dir": False})
+                    if len(hits) >= limit:
+                        return {"ok": True, "q": query, "root": root, "items": hits, "more": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "items": hits}
+    return {"ok": True, "q": query, "root": root, "items": hits, "more": False}
+
 
 
 def phone_home_once():
@@ -436,6 +542,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/fs":
             self._json(list_dir(unquote((q.get("path") or [HOME])[0])))
+            return
+        if path == "/read":
+            self._json(read_text_file(unquote((q.get("path") or [""])[0])))
+            return
+        if path == "/search":
+            self._json(search_files(unquote((q.get("path") or [HOME])[0]), unquote((q.get("q") or [""])[0])))
             return
         if path == "/download":
             fp = safe_path(unquote((q.get("path") or [""])[0]))
