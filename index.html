@@ -11,7 +11,7 @@
     header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
     header h1 { font-size: 14px; letter-spacing: .12em; color: var(--accent); }
     header span { color: var(--dim); font-size: 11px; }
-    .wrap { max-width: 960px; margin: 0 auto; padding: 12px; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 12px; }
     .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
     .panel h2 { font-size: 11px; color: var(--dim); letter-spacing: .1em; margin-bottom: 10px; text-transform: uppercase; }
     input, textarea { width: 100%; background: #08080c; border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; margin-bottom: 8px; }
@@ -36,12 +36,24 @@
     #lock h2 { color: var(--accent); letter-spacing: .15em; margin-bottom: 16px; font-size: 13px; }
     .port { display: inline-block; border: 1px solid var(--accent); color: var(--accent); padding: 4px 8px; margin: 3px; border-radius: 4px; font-size: 11px; }
     .hint { color: var(--dim); font-size: 11px; margin-bottom: 8px; line-height: 1.4; }
-    .file { display: flex; justify-content: space-between; gap: 8px; padding: 7px 8px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 12px; }
+    .file { display: grid; grid-template-columns: 1fr 90px 130px 50px; gap: 8px; padding: 7px 8px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 12px; align-items: center; }
     .file:hover { background: #111118; }
     .file .n { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file .s { color: var(--dim); font-size: 11px; flex-shrink: 0; }
+    .file .s { color: var(--dim); font-size: 11px; }
     .file.dir .n { color: var(--accent); }
-    #fileList { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; }
+    .file.hid .n { opacity: .55; font-style: italic; }
+    #fileList { max-height: 380px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; }
+    .explorer { display: grid; grid-template-columns: 150px 1fr; gap: 10px; }
+    @media (max-width: 640px) { .explorer { grid-template-columns: 1fr; } }
+    .drives { border: 1px solid var(--border); border-radius: 4px; padding: 6px; max-height: 380px; overflow: auto; }
+    .drv { padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
+    .drv:hover, .drv.on { border: 1px solid var(--accent); color: var(--accent); }
+    .drv small { display: block; color: var(--dim); font-size: 10px; margin-top: 3px; }
+    .crumbs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    .crumb { border: 1px solid var(--border); color: var(--dim); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+    .crumb:hover { border-color: var(--accent); color: var(--accent); }
+    #preview { margin-top: 10px; background: #08080c; border: 1px solid var(--border); border-radius: 4px; padding: 10px; max-height: 280px; overflow: auto; white-space: pre-wrap; font-size: 11px; color: #b8b8c4; display: none; }
+    #previewImg { max-width: 100%; max-height: 240px; display: none; margin-top: 10px; border: 1px solid var(--border); }
   </style>
 </head>
 <body>
@@ -108,9 +120,22 @@
           <button class="ghost" onclick="fsGoHome()">Home</button>
           <button class="ghost" onclick="browseFiles(curPath)">Refresh</button>
         </div>
-        <div id="curPath" class="hint">-</div>
-        <div id="fileList"></div>
-        <div class="hint" style="margin-top:10px">upload into this folder</div>
+        <input id="goPath" placeholder="paste or type a full path then Enter" />
+        <div class="row">
+          <input id="findQ" placeholder="find folder or file from here" style="flex:1;margin-bottom:8px" />
+          <button onclick="searchFiles()">Find</button>
+        </div>
+        <div id="crumbs" class="crumbs"></div>
+        <div class="explorer">
+          <div class="drives" id="driveList"></div>
+          <div>
+            <div id="curPath" class="hint">-</div>
+            <div id="fileList"></div>
+          </div>
+        </div>
+        <pre id="preview"></pre>
+        <img id="previewImg" alt="" />
+        <div class="hint" style="margin-top:10px">upload into this folder · hidden files included</div>
         <input id="upFile" type="file" />
         <button onclick="uploadFile()">Upload</button>
       </div>
@@ -375,48 +400,144 @@
     }
 
     function fmtSize(n) {
+      n = Number(n) || 0;
       if (n < 1024) return n + " B";
       if (n < 1024*1024) return (n/1024).toFixed(1) + " KB";
-      return (n/1024/1024).toFixed(1) + " MB";
+      if (n < 1024*1024*1024) return (n/1024/1024).toFixed(1) + " MB";
+      return (n/1024/1024/1024).toFixed(1) + " GB";
+    }
+    function fmtTime(t) {
+      if (!t) return "";
+      const d = new Date(t * 1000);
+      return d.toLocaleString();
+    }
+    function esc(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&","<":"<",">":">","\"":""","'":"&#39;"}[c])); }
+    function crumbs(path) {
+      const box = document.getElementById("crumbs");
+      if (!path) { box.innerHTML = ""; return; }
+      const win = path.indexOf("\\") >= 0;
+      const sep = win ? "\\" : "/";
+      const raw = win ? path.replace(/\\/g, "\\") : path;
+      const parts = path.split(/[\\/]/).filter((p, i) => p !== "" || i === 0);
+      let acc = win ? "" : "";
+      const bits = [];
+      if (win) {
+        const drive = path.slice(0, 3);
+        bits.push(`<span class="crumb" onclick='browseFiles(${JSON.stringify(drive)})'>${esc(drive)}</span>`);
+        acc = drive;
+        path.split("\\").slice(1).filter(Boolean).forEach(p => {
+          acc = acc.replace(/\\+$/, "") + "\\" + p;
+          bits.push(`<span class="crumb" onclick='browseFiles(${JSON.stringify(acc)})'>${esc(p)}</span>`);
+        });
+      } else {
+        bits.push(`<span class="crumb" onclick='browseFiles("/")'>/</span>`);
+        acc = "";
+        path.split("/").filter(Boolean).forEach(p => {
+          acc += "/" + p;
+          bits.push(`<span class="crumb" onclick='browseFiles(${JSON.stringify(acc)})'>${esc(p)}</span>`);
+        });
+      }
+      box.innerHTML = bits.join("");
+    }
+    function renderDrives(drives, current) {
+      const box = document.getElementById("driveList");
+      box.innerHTML = (drives || []).map(d => {
+        const p = d.path || d;
+        const n = d.name || p;
+        const extra = d.total ? fmtSize(d.free) + " free" : "";
+        const on = current && String(current).toUpperCase().startsWith(String(p).toUpperCase()) ? " on" : "";
+        return `<div class="drv${on}" onclick='browseFiles(${JSON.stringify(p)})'>${esc(n)}<small>${esc(extra)}</small></div>`;
+      }).join("") || "no drives";
     }
     async function browseFiles(path) {
       try {
         const j = await api("/fs?path=" + encodeURIComponent(path || ""));
-        if (!j.ok) { log("fs " + (j.error || "fail")); return; }
+        if (!j.ok) { log("fs " + (j.error || "fail")); renderDrives(j.drives || [], path); return; }
         curPath = j.path;
-        document.getElementById("curPath").textContent = curPath;
+        document.getElementById("curPath").textContent = (j.count || 0) + " items · hidden shown";
+        document.getElementById("goPath").value = curPath;
+        crumbs(curPath);
+        renderDrives(j.drives || [], curPath);
         const box = document.getElementById("fileList");
-        const rows = [];
+        const rows = [`<div class="file" style="cursor:default;color:var(--dim)"><div class="n">name</div><div class="s">size</div><div class="s">modified</div><div class="s"></div></div>`];
         if (j.parent && j.parent !== j.path) {
-          rows.push(`<div class="file dir" onclick="browseFiles(${JSON.stringify(j.parent)})"><div class="n">.. (parent)</div><div class="s">dir</div></div>`);
+          rows.push(`<div class="file dir" onclick='browseFiles(${JSON.stringify(j.parent)})'><div class="n">.. parent</div><div class="s"></div><div class="s"></div><div class="s">dir</div></div>`);
         }
-        (j.drives || []).forEach(d => {
-          rows.push(`<div class="file dir" onclick="browseFiles(${JSON.stringify(d)})"><div class="n">${d}</div><div class="s">drive</div></div>`);
-        });
         (j.items || []).forEach(it => {
+          const cls = "file" + (it.dir ? " dir" : "") + (it.hidden || it.system ? " hid" : "");
+          const tag = it.dir ? "dir" : (it.hidden ? "hid" : "file");
+          const name = (it.dir ? "▸ " : "") + it.name + (it.hidden ? "  (hidden)" : "");
           if (it.dir) {
-            rows.push(`<div class="file dir" onclick="browseFiles(${JSON.stringify(it.path)})"><div class="n">/${it.name}</div><div class="s">dir</div></div>`);
+            rows.push(`<div class="${cls}" onclick='browseFiles(${JSON.stringify(it.path)})'><div class="n">${esc(name)}</div><div class="s"></div><div class="s">${esc(fmtTime(it.mtime))}</div><div class="s">${tag}</div></div>`);
           } else {
-            rows.push(`<div class="file" onclick="downloadFile(${JSON.stringify(it.path)}, ${JSON.stringify(it.name)})"><div class="n">${it.name}</div><div class="s">${fmtSize(it.size)}</div></div>`);
+            rows.push(`<div class="${cls}" onclick='openFile(${JSON.stringify(it.path)}, ${JSON.stringify(it.name)})'><div class="n">${esc(name)}</div><div class="s">${fmtSize(it.size)}</div><div class="s">${esc(fmtTime(it.mtime))}</div><div class="s">${tag}</div></div>`);
           }
         });
-        box.innerHTML = rows.join("") || '<div class="hint" style="padding:8px">empty</div>';
+        box.innerHTML = rows.join("");
       } catch (e) { log("files fail · " + e.message); }
     }
     function fsGoParent() {
       if (!curPath) return;
       const p = curPath.replace(/[\\/]+$/, "");
+      if (/^[A-Za-z]:$/.test(p)) { browseFiles(p + "\\"); return; }
       const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
-      browseFiles(i > 0 ? p.slice(0, i + 1) : p);
+      browseFiles(i >= 0 ? p.slice(0, i + 1) : p);
     }
     function fsGoHome() { browseFiles(""); }
+    async function openFile(path, name) {
+      const lower = (name || "").toLowerCase();
+      const img = /\.(png|jpe?g|gif|webp|bmp|ico)$/.test(lower);
+      const prev = document.getElementById("preview");
+      const pimg = document.getElementById("previewImg");
+      prev.style.display = "none";
+      pimg.style.display = "none";
+      if (img) {
+        try {
+          const r = await fetch(base + "/download?path=" + encodeURIComponent(path) + "&k=" + encodeURIComponent(SECRET), { headers: hdrs() });
+          if (!r.ok) throw new Error(r.status);
+          pimg.src = URL.createObjectURL(await r.blob());
+          pimg.style.display = "block";
+          return;
+        } catch (e) { log("preview fail · " + e.message); }
+      }
+      try {
+        const j = await api("/read?path=" + encodeURIComponent(path));
+        if (!j.ok) { log(j.error || "read fail"); return; }
+        if (j.binary) {
+          prev.textContent = name + " is binary (" + fmtSize(j.size) + "). Use download.";
+          prev.style.display = "block";
+          if (confirm("Download " + name + "?")) downloadFile(path, name);
+          return;
+        }
+        prev.textContent = (j.truncated ? "[truncated]\n\n" : "") + j.text;
+        prev.style.display = "block";
+      } catch (e) { log("read fail · " + e.message); }
+    }
+    async function searchFiles() {
+      const q = document.getElementById("findQ").value.trim();
+      if (!q) { log("type a name to find"); return; }
+      document.getElementById("curPath").textContent = "searching " + q + " ...";
+      try {
+        const j = await api("/search?path=" + encodeURIComponent(curPath || "") + "&q=" + encodeURIComponent(q));
+        if (!j.ok) { log(j.error || "search fail"); return; }
+        const box = document.getElementById("fileList");
+        const rows = [`<div class="file" style="cursor:default;color:var(--dim)"><div class="n">${(j.items||[]).length} matches for ${esc(q)}</div><div class="s"></div><div class="s"></div><div class="s"></div></div>`];
+        (j.items || []).forEach(it => {
+          if (it.dir) {
+            rows.push(`<div class="file dir" onclick='browseFiles(${JSON.stringify(it.path)})'><div class="n">▸ ${esc(it.name)}</div><div class="s"></div><div class="s">${esc(it.path)}</div><div class="s">dir</div></div>`);
+          } else {
+            rows.push(`<div class="file" onclick='openFile(${JSON.stringify(it.path)}, ${JSON.stringify(it.name)})'><div class="n">${esc(it.name)}</div><div class="s"></div><div class="s">${esc(it.path)}</div><div class="s">file</div></div>`);
+          }
+        });
+        box.innerHTML = rows.join("");
+      } catch (e) { log("find fail · " + e.message); }
+    }
     async function downloadFile(path, name) {
       try {
         const r = await fetch(base + "/download?path=" + encodeURIComponent(path) + "&k=" + encodeURIComponent(SECRET), { headers: hdrs() });
         if (!r.ok) throw new Error(r.status);
-        const blob = await r.blob();
         const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
+        a.href = URL.createObjectURL(await r.blob());
         a.download = name || "file";
         a.click();
         log("downloaded " + name);
@@ -437,6 +558,12 @@
         browseFiles(curPath);
       } catch (e) { log("upload fail · " + e.message); }
     }
+    document.getElementById("goPath").addEventListener("keydown", e => {
+      if (e.key === "Enter") browseFiles(document.getElementById("goPath").value.trim());
+    });
+    document.getElementById("findQ").addEventListener("keydown", e => {
+      if (e.key === "Enter") searchFiles();
+    });
     setInterval(pingSize, 4000);
   </script>
 </body>
