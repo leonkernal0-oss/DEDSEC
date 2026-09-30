@@ -11,7 +11,7 @@
     header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
     header h1 { font-size: 14px; letter-spacing: .12em; color: var(--accent); }
     header span { color: var(--dim); font-size: 11px; }
-    .wrap { max-width: 860px; margin: 0 auto; padding: 12px; }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 12px; }
     .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
     .panel h2 { font-size: 11px; color: var(--dim); letter-spacing: .1em; margin-bottom: 10px; text-transform: uppercase; }
     input, textarea { width: 100%; background: #08080c; border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 4px; font-family: inherit; font-size: 12px; margin-bottom: 8px; }
@@ -20,7 +20,7 @@
     button.danger { border-color: var(--danger); color: var(--danger); }
     .row { display: flex; gap: 6px; flex-wrap: wrap; }
     .row button { flex: 1; min-width: 90px; }
-    #screen { width: 100%; background: #000; border: 1px solid var(--border); border-radius: 4px; min-height: 180px; object-fit: contain; touch-action: none; cursor: crosshair; }
+    #screen { width: 100%; background: #000; border: 1px solid var(--border); border-radius: 4px; min-height: 220px; object-fit: contain; touch-action: none; cursor: crosshair; }
     .machine { border: 1px solid var(--border); border-radius: 4px; padding: 10px; margin-bottom: 8px; cursor: pointer; }
     .machine:hover { border-color: var(--accent); }
     .machine .name { color: var(--accent); font-weight: 600; }
@@ -36,6 +36,12 @@
     #lock h2 { color: var(--accent); letter-spacing: .15em; margin-bottom: 16px; font-size: 13px; }
     .port { display: inline-block; border: 1px solid var(--accent); color: var(--accent); padding: 4px 8px; margin: 3px; border-radius: 4px; font-size: 11px; }
     .hint { color: var(--dim); font-size: 11px; margin-bottom: 8px; line-height: 1.4; }
+    .file { display: flex; justify-content: space-between; gap: 8px; padding: 7px 8px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 12px; }
+    .file:hover { background: #111118; }
+    .file .n { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file .s { color: var(--dim); font-size: 11px; flex-shrink: 0; }
+    .file.dir .n { color: var(--accent); }
+    #fileList { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; }
   </style>
 </head>
 <body>
@@ -54,7 +60,7 @@
   <div class="wrap">
     <div class="panel">
       <h2>download agent</h2>
-      <div class="hint">paste your ngrok token, download agent.py, then run the admin .bat (python stays open). or build an exe on that PC with the third file.</div>
+      <div class="hint">paste ngrok token → download agent.py + run-admin.bat. keep the python window open.</div>
       <input id="tok" placeholder="ngrok authtoken" />
       <div class="row">
         <button onclick="dlPy()">Download agent.py</button>
@@ -77,16 +83,17 @@
     <div id="control" class="hidden">
       <div class="tabs">
         <div class="tab active" data-t="screen">Desktop</div>
+        <div class="tab" data-t="files">Files</div>
         <div class="tab" data-t="ports">Ports</div>
         <div class="tab" data-t="sys">Shell</div>
         <div class="tab" data-t="power">Power</div>
       </div>
       <div id="p-screen" class="panel">
-        <div id="deskMeta" class="hint">tap image to click</div>
+        <div id="deskMeta" class="hint">live stream · tap to click</div>
         <img id="screen" />
         <div class="row" style="margin-top:8px">
-          <button onclick="grabScreen()">Refresh</button>
-          <button class="ghost" id="autoBtn" onclick="toggleAuto()">Live Off</button>
+          <button onclick="startStream()">Start live</button>
+          <button class="ghost" onclick="stopStream()">Stop</button>
         </div>
         <input id="typeBox" placeholder="type text to send" />
         <div class="row">
@@ -95,9 +102,21 @@
           <button class="ghost" onclick="key('escape')">Esc</button>
         </div>
       </div>
+      <div id="p-files" class="panel hidden">
+        <div class="row" style="margin-bottom:8px">
+          <button onclick="fsGoParent()">Up</button>
+          <button class="ghost" onclick="fsGoHome()">Home</button>
+          <button class="ghost" onclick="browseFiles(curPath)">Refresh</button>
+        </div>
+        <div id="curPath" class="hint">-</div>
+        <div id="fileList"></div>
+        <div class="hint" style="margin-top:10px">upload into this folder</div>
+        <input id="upFile" type="file" />
+        <button onclick="uploadFile()">Upload</button>
+      </div>
       <div id="p-ports" class="panel hidden">
         <button onclick="scanPorts()">Scan this PC</button>
-        <div id="portBox" class="hint" style="margin-top:10px">scans localhost common ports on the connected device</div>
+        <div id="portBox" class="hint" style="margin-top:10px">localhost ports on the connected device</div>
       </div>
       <div id="p-sys" class="panel hidden">
         <button onclick="getInfo()">Info</button>
@@ -106,7 +125,7 @@
         <pre id="out">_</pre>
       </div>
       <div id="p-power" class="panel hidden">
-        <div class="hint">these run on the connected PC. confirm twice.</div>
+        <div class="hint">runs on the connected PC. confirm twice.</div>
         <div class="row">
           <button class="danger" onclick="power('sleep')">Sleep</button>
           <button class="danger" onclick="power('restart')">Restart</button>
@@ -119,7 +138,8 @@
     const BEACON = "/api/beacon";
     const PAGE_PASS = "0000";
     const SECRET = "axion-remote-2026";
-    let base = null, autoT = null, machines = {}, unlocked = false, deskW = 1920, deskH = 1080;
+    let base = null, machines = {}, unlocked = false, deskW = 1920, deskH = 1080;
+    let streamReader = null, streamOn = false, curPath = "", lastMove = 0;
 
     setInterval(() => { document.getElementById("clock").textContent = new Date().toLocaleTimeString(); }, 1000);
     document.getElementById("tok").value = localStorage.getItem("ngrokTok") || "";
@@ -147,6 +167,7 @@
         document.querySelectorAll("[id^=p-]").forEach(x => x.classList.add("hidden"));
         t.classList.add("active");
         document.getElementById("p-" + t.dataset.t).classList.remove("hidden");
+        if (t.dataset.t === "files") browseFiles(curPath);
       };
     });
 
@@ -170,50 +191,37 @@
         let src = await r.text();
         src = src.replace(/NGROK_TOKEN\s*=\s*".*?"/, 'NGROK_TOKEN = "' + token.replace(/"/g, "") + '"');
         dl("agent.py", src);
-        log("downloaded agent.py with your token");
-      } catch (e) {
-        log("download fail · " + e.message);
-      }
+        log("downloaded agent.py");
+      } catch (e) { log("download fail · " + e.message); }
     }
     function dlBat() {
       dl("run-admin.bat", [
-        "@echo off",
-        "cd /d \"%~dp0\"",
+        "@echo off","cd /d \"%~dp0\"",
         "net session >nul 2>&1",
-        "if %errorLevel% neq 0 (",
-        "  powershell -NoProfile -Command \"Start-Process -FilePath '%~f0' -Verb RunAs\"",
-        "  exit /b",
-        ")",
+        "if %errorLevel% neq 0 (powershell -NoProfile -Command \"Start-Process -FilePath '%~f0' -Verb RunAs\" & exit /b)",
         "where python >nul 2>&1",
-        "if errorlevel 1 (",
-        "  echo Install Python from python.org and tick Add to PATH",
-        "  pause",
-        "  exit /b 1",
-        ")",
-        "python -m pip install pillow pyautogui -q",
+        "if errorlevel 1 (echo Install Python and Add to PATH & pause & exit /b 1)",
+        "python -m pip install pillow pyautogui mss -q",
         "echo Starting agent — do not close this window",
-        "python \"%~dp0agent.py\"",
-        "pause",
-        ""
+        "python \"%~dp0agent.py\"","pause",""
       ].join("\r\n"));
       log("downloaded run-admin.bat");
     }
     function dlExeBat() {
       dl("build-exe.bat", [
-        "@echo off",
-        "cd /d \"%~dp0\"",
-        "python -m pip install pyinstaller pillow pyautogui",
+        "@echo off","cd /d \"%~dp0\"",
+        "python -m pip install pyinstaller pillow pyautogui mss",
         "python -m PyInstaller --onefile --uac-admin --name AxionAgent agent.py",
-        "echo EXE is dist\\AxionAgent.exe — run that as Administrator",
-        "pause",
-        ""
+        "echo EXE is dist\\AxionAgent.exe","pause",""
       ].join("\r\n"));
-      log("downloaded build-exe.bat");
     }
 
+    function hdrs(extra) {
+      return Object.assign({ "X-Secret": SECRET, "ngrok-skip-browser-warning": "true" }, extra || {});
+    }
     async function api(path, method="GET", body=null) {
       if (!base) throw new Error("no host");
-      const opts = { method, headers: { "X-Secret": SECRET, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" } };
+      const opts = { method, headers: hdrs({ "Content-Type": "application/json" }) };
       if (body) opts.body = JSON.stringify(body);
       const r = await fetch(base + path, opts);
       if (!r.ok) throw new Error(r.status);
@@ -221,14 +229,65 @@
     }
 
     function setTarget(url) {
-      if (!url) { log("host has no public url yet — wait for ngrok in the agent window"); return; }
+      if (!url) { log("no public url yet"); return; }
       base = url.replace(/\/$/, "");
       document.getElementById("control").classList.remove("hidden");
       log("linked " + base);
-      grabScreen();
-      if (!autoT) toggleAuto();
+      startStream();
+      pingSize();
     }
     window.setTarget = setTarget;
+
+    async function pingSize() {
+      try {
+        const j = await api("/ping");
+        if (j.w) deskW = j.w; if (j.h) deskH = j.h;
+        document.getElementById("deskMeta").textContent = deskW + "x" + deskH + " · live " + (j.fps || "?") + " fps · tap to click";
+      } catch (e) {}
+    }
+
+    function stopStream() {
+      streamOn = false;
+      try { if (streamReader) streamReader.cancel(); } catch (e) {}
+      streamReader = null;
+    }
+
+    async function startStream() {
+      if (!base) return;
+      stopStream();
+      streamOn = true;
+      log("starting live stream");
+      try {
+        const res = await fetch(base + "/stream.mjpeg?k=" + encodeURIComponent(SECRET), { headers: hdrs() });
+        if (!res.ok || !res.body) throw new Error(res.status);
+        const reader = res.body.getReader();
+        streamReader = reader;
+        let buf = new Uint8Array(0);
+        const concat = (a, b) => { const c = new Uint8Array(a.length + b.length); c.set(a, 0); c.set(b, a.length); return c; };
+        while (streamOn) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf = concat(buf, value);
+          while (true) {
+            let s = -1, e = -1;
+            for (let i = 0; i < buf.length - 1; i++) { if (buf[i] === 0xFF && buf[i + 1] === 0xD8) { s = i; break; } }
+            if (s < 0) { buf = buf.length > 2 ? buf.slice(-2) : buf; break; }
+            for (let i = s + 2; i < buf.length - 1; i++) { if (buf[i] === 0xFF && buf[i + 1] === 0xD9) { e = i + 2; break; } }
+            if (e < 0) { buf = buf.slice(s); break; }
+            const jpeg = buf.slice(s, e);
+            buf = buf.slice(e);
+            const blob = new Blob([jpeg], { type: "image/jpeg" });
+            const url = URL.createObjectURL(blob);
+            const img = document.getElementById("screen");
+            const old = img.src;
+            img.src = url;
+            if (old && old.startsWith("blob:")) URL.revokeObjectURL(old);
+          }
+        }
+      } catch (e) {
+        log("stream fail · " + e.message);
+      }
+    }
 
     function clearHosts() { machines = {}; renderMachines(); }
 
@@ -253,35 +312,34 @@
       if (!unlocked) return;
       try {
         const j = await (await fetch(BEACON)).json();
-        for (const b of (j.hosts || [])) {
-          if (b && b.id) { machines[b.id] = b; }
-        }
+        for (const b of (j.hosts || [])) { if (b && b.id) machines[b.id] = b; }
         renderMachines();
         log("hosts " + Object.keys(machines).length);
       } catch (e) { log("beacon fail · " + e.message); }
     }
 
-    async function grabScreen() {
-      try {
-        const j = await api("/screen");
-        if (j.w) deskW = j.w; if (j.h) deskH = j.h;
-        document.getElementById("deskMeta").textContent = deskW + "x" + deskH + " · tap to click";
-        if (j.img) document.getElementById("screen").src = "data:image/jpeg;base64," + j.img;
-      } catch (e) { log("screen fail · " + e.message); }
-    }
-    function toggleAuto() {
-      const btn = document.getElementById("autoBtn");
-      if (autoT) { clearInterval(autoT); autoT = null; btn.textContent = "Live Off"; }
-      else { autoT = setInterval(grabScreen, 1200); btn.textContent = "Live On"; }
+    function xyFromEvent(e) {
+      const r = e.target.getBoundingClientRect();
+      return {
+        x: Math.round(((e.clientX - r.left) / r.width) * deskW),
+        y: Math.round(((e.clientY - r.top) / r.height) * deskH)
+      };
     }
     document.getElementById("screen").addEventListener("pointerdown", async e => {
       e.preventDefault();
-      const r = e.target.getBoundingClientRect();
-      const x = Math.round(((e.clientX - r.left) / r.width) * deskW);
-      const y = Math.round(((e.clientY - r.top) / r.height) * deskH);
-      try { await api("/mouse", "POST", { x, y, button: e.button === 2 ? "right" : "left" }); setTimeout(grabScreen, 200); }
+      const p = xyFromEvent(e);
+      try { await api("/mouse", "POST", { x: p.x, y: p.y, button: e.button === 2 ? "right" : "left" }); }
       catch (err) { log("click fail · " + err.message); }
     });
+    document.getElementById("screen").addEventListener("pointermove", async e => {
+      if (!e.buttons) return;
+      const now = Date.now();
+      if (now - lastMove < 30) return;
+      lastMove = now;
+      const p = xyFromEvent(e);
+      try { await api("/mouse", "POST", { x: p.x, y: p.y, button: "move" }); } catch (err) {}
+    });
+
     async function sendText() {
       const t = document.getElementById("typeBox").value;
       if (!t) return;
@@ -312,11 +370,74 @@
     async function power(action) {
       if (!confirm(action.toUpperCase() + " this PC?")) return;
       if (!confirm("Really " + action + "?")) return;
-      try {
-        const j = await api("/power", "POST", { action });
-        log(JSON.stringify(j));
-      } catch (e) { log("power fail · " + e.message); }
+      try { log(JSON.stringify(await api("/power", "POST", { action }))); }
+      catch (e) { log("power fail · " + e.message); }
     }
+
+    function fmtSize(n) {
+      if (n < 1024) return n + " B";
+      if (n < 1024*1024) return (n/1024).toFixed(1) + " KB";
+      return (n/1024/1024).toFixed(1) + " MB";
+    }
+    async function browseFiles(path) {
+      try {
+        const j = await api("/fs?path=" + encodeURIComponent(path || ""));
+        if (!j.ok) { log("fs " + (j.error || "fail")); return; }
+        curPath = j.path;
+        document.getElementById("curPath").textContent = curPath;
+        const box = document.getElementById("fileList");
+        const rows = [];
+        if (j.parent && j.parent !== j.path) {
+          rows.push(`<div class="file dir" onclick="browseFiles(${JSON.stringify(j.parent)})"><div class="n">.. (parent)</div><div class="s">dir</div></div>`);
+        }
+        (j.drives || []).forEach(d => {
+          rows.push(`<div class="file dir" onclick="browseFiles(${JSON.stringify(d)})"><div class="n">${d}</div><div class="s">drive</div></div>`);
+        });
+        (j.items || []).forEach(it => {
+          if (it.dir) {
+            rows.push(`<div class="file dir" onclick="browseFiles(${JSON.stringify(it.path)})"><div class="n">/${it.name}</div><div class="s">dir</div></div>`);
+          } else {
+            rows.push(`<div class="file" onclick="downloadFile(${JSON.stringify(it.path)}, ${JSON.stringify(it.name)})"><div class="n">${it.name}</div><div class="s">${fmtSize(it.size)}</div></div>`);
+          }
+        });
+        box.innerHTML = rows.join("") || '<div class="hint" style="padding:8px">empty</div>';
+      } catch (e) { log("files fail · " + e.message); }
+    }
+    function fsGoParent() {
+      if (!curPath) return;
+      const p = curPath.replace(/[\\/]+$/, "");
+      const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
+      browseFiles(i > 0 ? p.slice(0, i + 1) : p);
+    }
+    function fsGoHome() { browseFiles(""); }
+    async function downloadFile(path, name) {
+      try {
+        const r = await fetch(base + "/download?path=" + encodeURIComponent(path) + "&k=" + encodeURIComponent(SECRET), { headers: hdrs() });
+        if (!r.ok) throw new Error(r.status);
+        const blob = await r.blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = name || "file";
+        a.click();
+        log("downloaded " + name);
+      } catch (e) { log("dl fail · " + e.message); }
+    }
+    async function uploadFile() {
+      const inp = document.getElementById("upFile");
+      if (!inp.files || !inp.files[0]) { log("pick a file"); return; }
+      const f = inp.files[0];
+      try {
+        const r = await fetch(base + "/upload?path=" + encodeURIComponent(curPath || "") + "&name=" + encodeURIComponent(f.name), {
+          method: "POST",
+          headers: hdrs({ "Content-Type": "application/octet-stream" }),
+          body: f
+        });
+        const j = await r.json();
+        log(j.ok ? "uploaded " + f.name : ("upload fail " + (j.error || "")));
+        browseFiles(curPath);
+      } catch (e) { log("upload fail · " + e.message); }
+    }
+    setInterval(pingSize, 4000);
   </script>
 </body>
 </html>
