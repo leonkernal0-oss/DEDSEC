@@ -36,24 +36,76 @@
     #lock h2 { color: var(--accent); letter-spacing: .15em; margin-bottom: 16px; font-size: 13px; }
     .port { display: inline-block; border: 1px solid var(--accent); color: var(--accent); padding: 4px 8px; margin: 3px; border-radius: 4px; font-size: 11px; }
     .hint { color: var(--dim); font-size: 11px; margin-bottom: 8px; line-height: 1.4; }
-    .file { display: grid; grid-template-columns: 1fr 90px 130px 50px; gap: 8px; padding: 7px 8px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 12px; align-items: center; }
-    .file:hover { background: #111118; }
-    .file .n { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file .s { color: var(--dim); font-size: 11px; }
-    .file.dir .n { color: var(--accent); }
-    .file.hid .n { opacity: .55; font-style: italic; }
-    #fileList { max-height: 380px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; }
-    .explorer { display: grid; grid-template-columns: 150px 1fr; gap: 10px; }
-    @media (max-width: 640px) { .explorer { grid-template-columns: 1fr; } }
-    .drives { border: 1px solid var(--border); border-radius: 4px; padding: 6px; max-height: 380px; overflow: auto; }
-    .drv { padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
-    .drv:hover, .drv.on { border: 1px solid var(--accent); color: var(--accent); }
-    .drv small { display: block; color: var(--dim); font-size: 10px; margin-top: 3px; }
-    .crumbs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
-    .crumb { border: 1px solid var(--border); color: var(--dim); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
-    .crumb:hover { border-color: var(--accent); color: var(--accent); }
-    #preview { margin-top: 10px; background: #08080c; border: 1px solid var(--border); border-radius: 4px; padding: 10px; max-height: 280px; overflow: auto; white-space: pre-wrap; font-size: 11px; color: #b8b8c4; display: none; }
-    #previewImg { max-width: 100%; max-height: 240px; display: none; margin-top: 10px; border: 1px solid var(--border); }
+    .finder {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      background: #2c2c2e;
+      border: 1px solid #3a3a3c;
+      border-radius: 12px;
+      overflow: hidden;
+      color: #f5f5f7;
+    }
+    .finder-bar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      background: linear-gradient(#3a3a3c, #323234);
+      border-bottom: 1px solid #1c1c1e;
+    }
+    .dots { display: flex; gap: 6px; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+    .finder-title { flex: 1; text-align: center; font-size: 13px; font-weight: 600; color: #eee; }
+    .navbtn {
+      width: 28px; height: 24px; border: 0; background: #4a4a4c; color: #fff;
+      border-radius: 6px; cursor: pointer; font-size: 12px; padding: 0; letter-spacing: 0;
+      text-transform: none; min-width: 0;
+    }
+    .navbtn:disabled { opacity: .35; cursor: default; }
+    .finder-search {
+      width: 160px; margin: 0; background: #1c1c1e; border: 0; border-radius: 8px;
+      color: #fff; padding: 6px 10px; font-size: 12px; font-family: inherit;
+    }
+    .finder-body { display: grid; grid-template-columns: 168px 1fr; min-height: 420px; }
+    @media (max-width: 700px) { .finder-body { grid-template-columns: 1fr; } }
+    .finder-side {
+      background: #232325; padding: 12px 8px; border-right: 1px solid #1c1c1e;
+    }
+    .side-label { font-size: 11px; color: #8e8e93; padding: 4px 10px; font-weight: 600; }
+    .side-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; color: #e8e8ed;
+    }
+    .side-item:hover, .side-item.on { background: #0a84ff; color: #fff; }
+    .side-item small { color: inherit; opacity: .7; font-size: 10px; margin-left: auto; }
+    .finder-main { display: flex; flex-direction: column; min-width: 0; background: #1c1c1e; }
+    .finder-cols {
+      display: grid; grid-template-columns: 1fr 90px 140px;
+      padding: 6px 14px; font-size: 11px; color: #8e8e93; border-bottom: 1px solid #2c2c2e;
+    }
+    #fileList { max-height: 360px; overflow: auto; border: 0; }
+    .frow {
+      display: grid; grid-template-columns: 1fr 90px 140px;
+      padding: 6px 14px; font-size: 13px; align-items: center; cursor: pointer;
+      border-bottom: 1px solid #2a2a2c;
+    }
+    .frow:hover { background: #2c2c2e; }
+    .frow.on { background: #0a84ff; color: #fff; }
+    .frow .nm { display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .frow.hid { opacity: .55; }
+    .ico { width: 18px; height: 18px; flex-shrink: 0; }
+    .finder-preview {
+      display: none; border-top: 1px solid #2c2c2e; background: #161618;
+      padding: 12px 14px; max-height: 220px; overflow: auto;
+      white-space: pre-wrap; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #d0d0d5;
+    }
+    .finder-foot {
+      display: flex; gap: 8px; align-items: center; padding: 8px 12px;
+      background: #2c2c2e; border-top: 1px solid #1c1c1e; font-size: 12px; color: #8e8e93;
+    }
+    .finder-foot button {
+      border: 0; background: #4a4a4c; color: #fff; text-transform: none; letter-spacing: 0;
+      border-radius: 8px; padding: 6px 10px; font-size: 12px; min-width: 0;
+    }
+    #previewImg { max-width: 100%; max-height: 180px; display: none; margin-top: 8px; border-radius: 8px; }
   </style>
 </head>
 <body>
@@ -114,30 +166,33 @@
           <button class="ghost" onclick="key('escape')">Esc</button>
         </div>
       </div>
-      <div id="p-files" class="panel hidden">
-        <div class="row" style="margin-bottom:8px">
-          <button onclick="fsGoParent()">Up</button>
-          <button class="ghost" onclick="fsGoHome()">Home</button>
-          <button class="ghost" onclick="browseFiles(curPath)">Refresh</button>
-        </div>
-        <input id="goPath" placeholder="paste or type a full path then Enter" />
-        <div class="row">
-          <input id="findQ" placeholder="find folder or file from here" style="flex:1;margin-bottom:8px" />
-          <button onclick="searchFiles()">Find</button>
-        </div>
-        <div id="crumbs" class="crumbs"></div>
-        <div class="explorer">
-          <div class="drives" id="driveList"></div>
-          <div>
-            <div id="curPath" class="hint">-</div>
-            <div id="fileList"></div>
+      <div id="p-files" class="panel hidden" style="padding:0;background:transparent;border:0">
+        <div class="finder">
+          <div class="finder-bar">
+            <div class="dots"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+            <button class="navbtn" id="btnBack" onclick="fsBack()">‹</button>
+            <button class="navbtn" id="btnFwd" onclick="fsFwd()">›</button>
+            <div class="finder-title" id="finderTitle">Finder</div>
+            <input class="finder-search" id="findQ" placeholder="Search" />
+          </div>
+          <div class="finder-body">
+            <div class="finder-side" id="driveList"></div>
+            <div class="finder-main">
+              <div class="finder-cols"><span>Name</span><span>Size</span><span>Date Modified</span></div>
+              <div id="fileList"></div>
+              <div class="finder-preview" id="preview"></div>
+              <img id="previewImg" alt="" />
+            </div>
+          </div>
+          <div class="finder-foot">
+            <span id="curPath">Select a drive</span>
+            <span style="flex:1"></span>
+            <input id="upFile" type="file" style="width:auto;margin:0;padding:0;border:0;background:transparent;color:#ccc" />
+            <button type="button" onclick="uploadFile()">Upload</button>
+            <button type="button" id="btnOpen" onclick="openSelected()">Open</button>
+            <button type="button" id="btnDl" onclick="downloadSelected()">Download</button>
           </div>
         </div>
-        <pre id="preview"></pre>
-        <img id="previewImg" alt="" />
-        <div class="hint" style="margin-top:10px">upload into this folder · hidden files included</div>
-        <input id="upFile" type="file" />
-        <button onclick="uploadFile()">Upload</button>
       </div>
       <div id="p-ports" class="panel hidden">
         <button onclick="scanPorts()">Scan this PC</button>
@@ -165,6 +220,7 @@
     const SECRET = "axion-remote-2026";
     let base = null, machines = {}, unlocked = false, deskW = 1920, deskH = 1080;
     let streamReader = null, streamOn = false, curPath = "", lastMove = 0;
+    let fsHist = [], fsIdx = -1, selected = null, lastItems = [];
 
     setInterval(() => { document.getElementById("clock").textContent = new Date().toLocaleTimeString(); }, 1000);
     document.getElementById("tok").value = localStorage.getItem("ngrokTok") || "";
@@ -402,95 +458,98 @@
     function fmtSize(n) {
       n = Number(n) || 0;
       if (n < 1024) return n + " B";
-      if (n < 1024*1024) return (n/1024).toFixed(1) + " KB";
-      if (n < 1024*1024*1024) return (n/1024/1024).toFixed(1) + " MB";
-      return (n/1024/1024/1024).toFixed(1) + " GB";
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+      if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + " MB";
+      return (n / 1024 / 1024 / 1024).toFixed(1) + " GB";
     }
     function fmtTime(t) {
       if (!t) return "";
-      const d = new Date(t * 1000);
-      return d.toLocaleString();
+      return new Date(t * 1000).toLocaleString();
     }
-    function esc(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&","<":"<",">":">","\"":""","'":"&#39;"}[c])); }
-    function crumbs(path) {
-      const box = document.getElementById("crumbs");
-      if (!path) { box.innerHTML = ""; return; }
-      const win = path.indexOf("\\") >= 0;
-      const sep = win ? "\\" : "/";
-      const raw = win ? path.replace(/\\/g, "\\") : path;
-      const parts = path.split(/[\\/]/).filter((p, i) => p !== "" || i === 0);
-      let acc = win ? "" : "";
-      const bits = [];
-      if (win) {
-        const drive = path.slice(0, 3);
-        bits.push(`<span class="crumb" onclick='browseFiles(${JSON.stringify(drive)})'>${esc(drive)}</span>`);
-        acc = drive;
-        path.split("\\").slice(1).filter(Boolean).forEach(p => {
-          acc = acc.replace(/\\+$/, "") + "\\" + p;
-          bits.push(`<span class="crumb" onclick='browseFiles(${JSON.stringify(acc)})'>${esc(p)}</span>`);
-        });
-      } else {
-        bits.push(`<span class="crumb" onclick='browseFiles("/")'>/</span>`);
-        acc = "";
-        path.split("/").filter(Boolean).forEach(p => {
-          acc += "/" + p;
-          bits.push(`<span class="crumb" onclick='browseFiles(${JSON.stringify(acc)})'>${esc(p)}</span>`);
-        });
-      }
-      box.innerHTML = bits.join("");
+    function folderIco() {
+      return '<svg class="ico" viewBox="0 0 24 24"><path fill="#4dabf7" d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.2l1.6 1.6H18.5A2.5 2.5 0 0 1 21 8.1v9.4A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z"/><path fill="#74c0fc" d="M3 9h18v8.5A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>';
+    }
+    function fileIco() {
+      return '<svg class="ico" viewBox="0 0 24 24"><path fill="#ced4da" d="M7 3h7l5 5v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path fill="#868e96" d="M14 3v5h5"/></svg>';
+    }
+    function baseName(p) {
+      if (!p) return "Finder";
+      const s = String(p).replace(/[\\/]+$/, "");
+      const i = Math.max(s.lastIndexOf("\\"), s.lastIndexOf("/"));
+      return i >= 0 ? (s.slice(i + 1) || s) : s;
+    }
+    function hidePreview() {
+      const prev = document.getElementById("preview");
+      const img = document.getElementById("previewImg");
+      prev.style.display = "none";
+      img.style.display = "none";
+      prev.textContent = "";
     }
     function renderDrives(drives, current) {
       const box = document.getElementById("driveList");
-      box.innerHTML = (drives || []).map(d => {
+      const loc = [`<div class="side-label">Locations</div>`,
+        `<div class="side-item" data-nav="home">${folderIco()} Home</div>`];
+      const dhtml = (drives || []).map(d => {
         const p = d.path || d;
         const n = d.name || p;
-        const extra = d.total ? fmtSize(d.free) + " free" : "";
+        const extra = d.total ? fmtSize(d.free) : "";
         const on = current && String(current).toUpperCase().startsWith(String(p).toUpperCase()) ? " on" : "";
-        return `<div class="drv${on}" onclick='browseFiles(${JSON.stringify(p)})'>${esc(n)}<small>${esc(extra)}</small></div>`;
-      }).join("") || "no drives";
+        return `<div class="side-item${on}" data-nav="path" data-path="${encodeURIComponent(p)}">${folderIco()} ${n}<small>${extra}</small></div>`;
+      }).join("");
+      box.innerHTML = loc.join("") + `<div class="side-label">Drives</div>` + (dhtml || "");
     }
-    async function browseFiles(path) {
+    async function browseFiles(path, fromHist) {
+      hidePreview();
+      selected = null;
       try {
         const j = await api("/fs?path=" + encodeURIComponent(path || ""));
         if (!j.ok) { log("fs " + (j.error || "fail")); renderDrives(j.drives || [], path); return; }
         curPath = j.path;
-        document.getElementById("curPath").textContent = (j.count || 0) + " items · hidden shown";
-        document.getElementById("goPath").value = curPath;
-        crumbs(curPath);
-        renderDrives(j.drives || [], curPath);
-        const box = document.getElementById("fileList");
-        const rows = [`<div class="file" style="cursor:default;color:var(--dim)"><div class="n">name</div><div class="s">size</div><div class="s">modified</div><div class="s"></div></div>`];
-        if (j.parent && j.parent !== j.path) {
-          rows.push(`<div class="file dir" onclick='browseFiles(${JSON.stringify(j.parent)})'><div class="n">.. parent</div><div class="s"></div><div class="s"></div><div class="s">dir</div></div>`);
+        lastItems = j.items || [];
+        if (!fromHist) {
+          fsHist = fsHist.slice(0, fsIdx + 1);
+          if (fsHist[fsHist.length - 1] !== curPath) fsHist.push(curPath);
+          fsIdx = fsHist.length - 1;
         }
-        (j.items || []).forEach(it => {
-          const cls = "file" + (it.dir ? " dir" : "") + (it.hidden || it.system ? " hid" : "");
-          const tag = it.dir ? "dir" : (it.hidden ? "hid" : "file");
-          const name = (it.dir ? "▸ " : "") + it.name + (it.hidden ? "  (hidden)" : "");
-          if (it.dir) {
-            rows.push(`<div class="${cls}" onclick='browseFiles(${JSON.stringify(it.path)})'><div class="n">${esc(name)}</div><div class="s"></div><div class="s">${esc(fmtTime(it.mtime))}</div><div class="s">${tag}</div></div>`);
-          } else {
-            rows.push(`<div class="${cls}" onclick='openFile(${JSON.stringify(it.path)}, ${JSON.stringify(it.name)})'><div class="n">${esc(name)}</div><div class="s">${fmtSize(it.size)}</div><div class="s">${esc(fmtTime(it.mtime))}</div><div class="s">${tag}</div></div>`);
-          }
+        document.getElementById("btnBack").disabled = fsIdx <= 0;
+        document.getElementById("btnFwd").disabled = fsIdx >= fsHist.length - 1;
+        document.getElementById("finderTitle").textContent = baseName(curPath);
+        document.getElementById("curPath").textContent = lastItems.length + " items  ·  " + curPath;
+        renderDrives(j.drives || [], curPath);
+        const rows = [];
+        if (j.parent && j.parent !== j.path) {
+          rows.push(`<div class="frow" data-dir="1" data-path="${encodeURIComponent(j.parent)}"><div class="nm">${folderIco()} ..</div><div></div><div></div></div>`);
+        }
+        lastItems.forEach((it, i) => {
+          const hid = it.hidden || it.system ? " hid" : "";
+          rows.push(
+            `<div class="frow${hid}" data-i="${i}" data-dir="${it.dir ? 1 : 0}" data-path="${encodeURIComponent(it.path)}" data-name="${encodeURIComponent(it.name)}">` +
+            `<div class="nm">${it.dir ? folderIco() : fileIco()} ${it.name}</div>` +
+            `<div>${it.dir ? "--" : fmtSize(it.size)}</div>` +
+            `<div>${fmtTime(it.mtime)}</div></div>`
+          );
         });
-        box.innerHTML = rows.join("");
+        document.getElementById("fileList").innerHTML = rows.join("") || '<div class="frow"><div class="nm">Empty folder</div></div>';
       } catch (e) { log("files fail · " + e.message); }
     }
-    function fsGoParent() {
-      if (!curPath) return;
-      const p = curPath.replace(/[\\/]+$/, "");
-      if (/^[A-Za-z]:$/.test(p)) { browseFiles(p + "\\"); return; }
-      const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
-      browseFiles(i >= 0 ? p.slice(0, i + 1) : p);
-    }
+    function fsBack() { if (fsIdx > 0) { fsIdx--; browseFiles(fsHist[fsIdx], true); } }
+    function fsFwd() { if (fsIdx < fsHist.length - 1) { fsIdx++; browseFiles(fsHist[fsIdx], true); } }
     function fsGoHome() { browseFiles(""); }
+    function openSelected() {
+      if (!selected) return;
+      if (selected.dir) browseFiles(selected.path);
+      else openFile(selected.path, selected.name);
+    }
+    function downloadSelected() {
+      if (!selected || selected.dir) return;
+      downloadFile(selected.path, selected.name);
+    }
     async function openFile(path, name) {
       const lower = (name || "").toLowerCase();
       const img = /\.(png|jpe?g|gif|webp|bmp|ico)$/.test(lower);
       const prev = document.getElementById("preview");
       const pimg = document.getElementById("previewImg");
-      prev.style.display = "none";
-      pimg.style.display = "none";
+      hidePreview();
       if (img) {
         try {
           const r = await fetch(base + "/download?path=" + encodeURIComponent(path) + "&k=" + encodeURIComponent(SECRET), { headers: hdrs() });
@@ -504,9 +563,8 @@
         const j = await api("/read?path=" + encodeURIComponent(path));
         if (!j.ok) { log(j.error || "read fail"); return; }
         if (j.binary) {
-          prev.textContent = name + " is binary (" + fmtSize(j.size) + "). Use download.";
+          prev.textContent = name + " is not text. Download it instead.";
           prev.style.display = "block";
-          if (confirm("Download " + name + "?")) downloadFile(path, name);
           return;
         }
         prev.textContent = (j.truncated ? "[truncated]\n\n" : "") + j.text;
@@ -515,21 +573,18 @@
     }
     async function searchFiles() {
       const q = document.getElementById("findQ").value.trim();
-      if (!q) { log("type a name to find"); return; }
-      document.getElementById("curPath").textContent = "searching " + q + " ...";
+      if (!q) { browseFiles(curPath); return; }
+      document.getElementById("finderTitle").textContent = "Searching…";
       try {
         const j = await api("/search?path=" + encodeURIComponent(curPath || "") + "&q=" + encodeURIComponent(q));
         if (!j.ok) { log(j.error || "search fail"); return; }
-        const box = document.getElementById("fileList");
-        const rows = [`<div class="file" style="cursor:default;color:var(--dim)"><div class="n">${(j.items||[]).length} matches for ${esc(q)}</div><div class="s"></div><div class="s"></div><div class="s"></div></div>`];
-        (j.items || []).forEach(it => {
-          if (it.dir) {
-            rows.push(`<div class="file dir" onclick='browseFiles(${JSON.stringify(it.path)})'><div class="n">▸ ${esc(it.name)}</div><div class="s"></div><div class="s">${esc(it.path)}</div><div class="s">dir</div></div>`);
-          } else {
-            rows.push(`<div class="file" onclick='openFile(${JSON.stringify(it.path)}, ${JSON.stringify(it.name)})'><div class="n">${esc(it.name)}</div><div class="s"></div><div class="s">${esc(it.path)}</div><div class="s">file</div></div>`);
-          }
-        });
-        box.innerHTML = rows.join("");
+        document.getElementById("finderTitle").textContent = "Results";
+        document.getElementById("curPath").textContent = (j.items || []).length + " matches for “" + q + "”";
+        const rows = (j.items || []).map(it =>
+          `<div class="frow" data-dir="${it.dir ? 1 : 0}" data-path="${encodeURIComponent(it.path)}" data-name="${encodeURIComponent(it.name)}">` +
+          `<div class="nm">${it.dir ? folderIco() : fileIco()} ${it.name}</div><div></div><div>${it.path}</div></div>`
+        );
+        document.getElementById("fileList").innerHTML = rows.join("") || '<div class="frow"><div class="nm">No results</div></div>';
       } catch (e) { log("find fail · " + e.message); }
     }
     async function downloadFile(path, name) {
@@ -540,12 +595,11 @@
         a.href = URL.createObjectURL(await r.blob());
         a.download = name || "file";
         a.click();
-        log("downloaded " + name);
       } catch (e) { log("dl fail · " + e.message); }
     }
     async function uploadFile() {
       const inp = document.getElementById("upFile");
-      if (!inp.files || !inp.files[0]) { log("pick a file"); return; }
+      if (!inp.files || !inp.files[0]) return;
       const f = inp.files[0];
       try {
         const r = await fetch(base + "/upload?path=" + encodeURIComponent(curPath || "") + "&name=" + encodeURIComponent(f.name), {
@@ -558,8 +612,23 @@
         browseFiles(curPath);
       } catch (e) { log("upload fail · " + e.message); }
     }
-    document.getElementById("goPath").addEventListener("keydown", e => {
-      if (e.key === "Enter") browseFiles(document.getElementById("goPath").value.trim());
+    document.getElementById("fileList").addEventListener("click", e => {
+      const row = e.target.closest(".frow");
+      if (!row || !row.dataset.path) return;
+      const path = decodeURIComponent(row.dataset.path);
+      const name = decodeURIComponent(row.dataset.name || "");
+      const isDir = row.dataset.dir === "1";
+      document.querySelectorAll(".frow.on").forEach(x => x.classList.remove("on"));
+      row.classList.add("on");
+      selected = { path, name, dir: isDir };
+      if (isDir) browseFiles(path);
+      else openFile(path, name);
+    });
+    document.getElementById("driveList").addEventListener("click", e => {
+      const item = e.target.closest(".side-item");
+      if (!item) return;
+      if (item.dataset.nav === "home") browseFiles("");
+      else if (item.dataset.path) browseFiles(decodeURIComponent(item.dataset.path));
     });
     document.getElementById("findQ").addEventListener("keydown", e => {
       if (e.key === "Enter") searchFiles();
