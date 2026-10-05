@@ -10,34 +10,29 @@
     body { font-family: "SF Mono", Consolas, monospace; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 13px; }
     header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
     .adbar {
-      background: #0a0a0e;
-      border-bottom: 1px solid #2a2a12;
-      padding: 8px 12px 10px;
-      text-align: center;
-      position: sticky;
-      top: 0;
-      z-index: 200;
+      display: none;
     }
-    .adbar-label {
-      display: inline-block;
-      font-size: 9px;
-      letter-spacing: 0.22em;
-      color: #8a7a2a;
-      border: 1px solid #3a3410;
-      padding: 2px 8px;
-      border-radius: 3px;
-      margin-bottom: 8px;
+    #aadsstickymuvb03i4:checked + div { display: none; }
+    .aads-rail {
+      width: 15%; height: 100%; position: fixed; text-align: center; font-size: 0;
+      top: 50%; transform: translateY(-50%); left: 0; min-width: 100px; z-index: 99999;
     }
-    .adbar iframe { border: 0; padding: 0; width: 70%; max-width: 728px; height: 120px; display: block; margin: 0 auto; overflow: hidden; background: #000; }
-    .adbar-link {
-      display: inline-block !important;
-      margin-top: 8px;
-      font-size: 10px;
-      letter-spacing: 0.08em;
-      color: #c4a84a;
-      text-decoration: none;
-      text-transform: uppercase;
+    .aads-label {
+      position: absolute; top: 12px; left: 0; right: 0; font-size: 9px; letter-spacing: 0.18em;
+      color: #8a7a2a; pointer-events: none; font-family: inherit;
     }
+    .aads-close {
+      bottom: 24px; margin: 0 auto; right: 0; left: 0; max-width: 24px; position: absolute;
+      border-radius: 4px; background: rgba(248,248,249,0.70); padding: 4px; z-index: 99999; cursor: pointer;
+    }
+    .aads-frame {
+      width: 100%; margin: auto; position: relative; z-index: 99998; height: 100%;
+      display: flex; flex-direction: column; justify-content: center;
+    }
+    .aads-frame iframe {
+      border: 0; padding: 0; width: 70%; height: 70%; overflow: hidden; margin: 0 auto;
+    }
+    .adbar-link { font-size: 10px; letter-spacing: 0.08em; color: #8a7a2a; text-decoration: none; text-transform: uppercase; }
     .adbar-link:hover { color: var(--accent); }
     header h1 { font-size: 14px; letter-spacing: .12em; color: var(--accent); }
     header span { color: var(--dim); font-size: 11px; }
@@ -61,7 +56,7 @@
     .tab.active { border-color: var(--accent); color: var(--accent); }
     .hidden { display: none; }
     .log { font-size: 11px; color: var(--dim); max-height: 90px; overflow-y: auto; margin-top: 8px; }
-    #lock { position: fixed; top: 148px; left: 0; right: 0; bottom: 0; background: #050507; display: flex; align-items: center; justify-content: center; z-index: 99; }
+    #lock { position: fixed; inset: 0; background: #050507; display: flex; align-items: center; justify-content: center; z-index: 99; }
     #lock .box { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 24px; width: 280px; text-align: center; }
     #lock h2 { color: var(--accent); letter-spacing: .15em; margin-bottom: 16px; font-size: 13px; }
     .port { display: inline-block; border: 1px solid var(--accent); color: var(--accent); padding: 4px 8px; margin: 3px; border-radius: 4px; font-size: 11px; }
@@ -158,12 +153,21 @@
   </style>
 </head>
 <body>
-  <div class="adbar">
-    <div class="adbar-label">ADVERTISEMENT</div>
-    <div id="frame" style="width:100%;margin:auto;position:relative;z-index:1">
-      <iframe data-aa="2457540" src="https://acceptable.a-ads.com/2457540/?size=Adaptive" title="Advertisement"></iframe>
+  <div style="position:absolute;z-index:99999">
+    <input autocomplete="off" type="checkbox" id="aadsstickymuvb03i4" hidden />
+    <div>
+      <div class="aads-rail">
+        <div class="aads-label">AD</div>
+        <label for="aadsstickymuvb03i4" class="aads-close">
+          <svg fill="#000000" height="16" width="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 490 490">
+            <polygon points="456.851,0 245,212.564 33.149,0 0.708,32.337 212.669,245.004 0.708,457.678 33.149,490 245,277.443 456.851,490 489.292,457.678 277.331,245.004 489.292,32.337"/>
+          </svg>
+        </label>
+        <div id="frame" class="aads-frame">
+          <iframe data-aa="2457540" src="https://acceptable.a-ads.com/2457540/?size=Adaptive" title="Advertisement"></iframe>
+        </div>
+      </div>
     </div>
-    <a class="adbar-link" href="https://aads.com/advertise/?partner=2457539" target="_blank" rel="noopener noreferrer">Get ads on this site</a>
   </div>
   <div id="lock">
     <div class="box">
@@ -175,7 +179,11 @@
   </div>
   <header>
     <h1>AXION // REMOTE</h1>
-    <span id="clock">--:--:--</span>
+    <span>
+      <a class="adbar-link" href="https://aads.com/advertise/?partner=2457539" target="_blank" rel="noopener noreferrer">Get ads</a>
+      &nbsp;·&nbsp;
+      <span id="clock">--:--:--</span>
+    </span>
   </header>
   <div class="wrap">
     <div class="panel">
