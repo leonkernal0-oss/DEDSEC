@@ -9,6 +9,37 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: "SF Mono", Consolas, monospace; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 13px; }
     header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .adbar {
+      background: #0a0a0e;
+      border-bottom: 1px solid #2a2a12;
+      padding: 8px 12px 10px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+    .adbar-label {
+      display: inline-block;
+      font-size: 9px;
+      letter-spacing: 0.22em;
+      color: #8a7a2a;
+      border: 1px solid #3a3410;
+      padding: 2px 8px;
+      border-radius: 3px;
+      margin-bottom: 8px;
+    }
+    .adbar a { display: inline-block; }
+    .adbar img { display: block; margin: 0 auto; max-width: 100%; height: auto; border: 1px solid #222; border-radius: 4px; }
+    .adbar-link {
+      display: inline-block !important;
+      margin-top: 8px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: #c4a84a;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+    .adbar-link:hover { color: var(--accent); }
     header h1 { font-size: 14px; letter-spacing: .12em; color: var(--accent); }
     header span { color: var(--dim); font-size: 11px; }
     .wrap { max-width: 1100px; margin: 0 auto; padding: 12px; }
@@ -31,7 +62,7 @@
     .tab.active { border-color: var(--accent); color: var(--accent); }
     .hidden { display: none; }
     .log { font-size: 11px; color: var(--dim); max-height: 90px; overflow-y: auto; margin-top: 8px; }
-    #lock { position: fixed; inset: 0; background: #050507; display: flex; align-items: center; justify-content: center; z-index: 99; }
+    #lock { position: fixed; top: 148px; left: 0; right: 0; bottom: 0; background: #050507; display: flex; align-items: center; justify-content: center; z-index: 99; }
     #lock .box { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 24px; width: 280px; text-align: center; }
     #lock h2 { color: var(--accent); letter-spacing: .15em; margin-bottom: 16px; font-size: 13px; }
     .port { display: inline-block; border: 1px solid var(--accent); color: var(--accent); padding: 4px 8px; margin: 3px; border-radius: 4px; font-size: 11px; }
@@ -43,72 +74,98 @@
       border-radius: 12px;
       overflow: hidden;
       color: #f5f5f7;
+      user-select: none;
     }
     .finder-bar {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 12px;
-      background: linear-gradient(#3a3a3c, #323234);
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 12px;
+      background: linear-gradient(#3d3d40, #323234);
       border-bottom: 1px solid #1c1c1e;
     }
-    .dots { display: flex; gap: 6px; }
+    .dots { display: flex; gap: 6px; margin-right: 4px; }
     .dot { width: 12px; height: 12px; border-radius: 50%; }
     .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
-    .finder-title { flex: 1; text-align: center; font-size: 13px; font-weight: 600; color: #eee; }
+    .finder-title { flex: 1; text-align: center; font-size: 13px; font-weight: 600; color: #eee; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .navbtn {
       width: 28px; height: 24px; border: 0; background: #4a4a4c; color: #fff;
-      border-radius: 6px; cursor: pointer; font-size: 12px; padding: 0; letter-spacing: 0;
+      border-radius: 6px; cursor: pointer; font-size: 13px; padding: 0; letter-spacing: 0;
       text-transform: none; min-width: 0;
     }
     .navbtn:disabled { opacity: .35; cursor: default; }
     .finder-search {
-      width: 160px; margin: 0; background: #1c1c1e; border: 0; border-radius: 8px;
+      width: 170px; margin: 0; background: #1c1c1e; border: 0; border-radius: 8px;
       color: #fff; padding: 6px 10px; font-size: 12px; font-family: inherit;
     }
-    .finder-body { display: grid; grid-template-columns: 168px 1fr; min-height: 420px; }
+    .finder-body { display: grid; grid-template-columns: 168px 1fr; min-height: 460px; }
     @media (max-width: 700px) { .finder-body { grid-template-columns: 1fr; } }
-    .finder-side {
-      background: #232325; padding: 12px 8px; border-right: 1px solid #1c1c1e;
-    }
-    .side-label { font-size: 11px; color: #8e8e93; padding: 4px 10px; font-weight: 600; }
+    .finder-side { background: #232325; padding: 12px 8px; border-right: 1px solid #1c1c1e; overflow: auto; }
+    .side-label { font-size: 11px; color: #8e8e93; padding: 8px 10px 4px; font-weight: 600; }
     .side-item {
       display: flex; align-items: center; gap: 8px;
       padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; color: #e8e8ed;
     }
-    .side-item:hover, .side-item.on { background: #0a84ff; color: #fff; }
+    .side-item:hover { background: #3a3a3c; }
+    .side-item.on { background: #0a84ff; color: #fff; }
     .side-item small { color: inherit; opacity: .7; font-size: 10px; margin-left: auto; }
     .finder-main { display: flex; flex-direction: column; min-width: 0; background: #1c1c1e; }
-    .finder-cols {
-      display: grid; grid-template-columns: 1fr 90px 140px;
-      padding: 6px 14px; font-size: 11px; color: #8e8e93; border-bottom: 1px solid #2c2c2e;
+    .colstrip { display: flex; flex: 1; overflow-x: auto; overflow-y: hidden; height: 440px; scroll-behavior: smooth; }
+    .fcol {
+      width: 230px; min-width: 230px; max-width: 230px;
+      border-right: 1px solid #2c2c2e; overflow-y: auto; height: 100%;
     }
-    #fileList { max-height: 360px; overflow: auto; border: 0; }
+    .fcol.loading { opacity: .5; }
     .frow {
-      display: grid; grid-template-columns: 1fr 90px 140px;
-      padding: 6px 14px; font-size: 13px; align-items: center; cursor: pointer;
-      border-bottom: 1px solid #2a2a2c;
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 10px; font-size: 13px; cursor: pointer;
+      border-bottom: 0;
     }
     .frow:hover { background: #2c2c2e; }
     .frow.on { background: #0a84ff; color: #fff; }
-    .frow .nm { display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .frow.hid { opacity: .55; }
+    .frow .nm { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
+    .frow.hid { opacity: .5; }
+    .frow .chev { color: #8e8e93; font-size: 11px; }
+    .frow.on .chev { color: #fff; }
     .ico { width: 18px; height: 18px; flex-shrink: 0; }
-    .finder-preview {
-      display: none; border-top: 1px solid #2c2c2e; background: #161618;
-      padding: 12px 14px; max-height: 220px; overflow: auto;
-      white-space: pre-wrap; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #d0d0d5;
+    .inspector {
+      width: 250px; min-width: 250px; background: #161618; border-left: 1px solid #2c2c2e;
+      padding: 14px; overflow: auto; height: 440px; font-size: 12px; color: #c7c7cc;
+    }
+    .inspector h3 { color: #fff; font-size: 14px; margin: 8px 0 10px; word-break: break-all; }
+    .inspector .kv { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid #2a2a2c; }
+    .inspector pre {
+      background: #0e0e10; border: 0; max-height: 180px; color: #d0d0d5; margin-top: 10px;
+      font-size: 11px; white-space: pre-wrap;
     }
     .finder-foot {
-      display: flex; gap: 8px; align-items: center; padding: 8px 12px;
+      display: flex; gap: 8px; align-items: center; padding: 8px 12px; flex-wrap: wrap;
       background: #2c2c2e; border-top: 1px solid #1c1c1e; font-size: 12px; color: #8e8e93;
     }
     .finder-foot button {
       border: 0; background: #4a4a4c; color: #fff; text-transform: none; letter-spacing: 0;
       border-radius: 8px; padding: 6px 10px; font-size: 12px; min-width: 0;
     }
-    #previewImg { max-width: 100%; max-height: 180px; display: none; margin-top: 8px; border-radius: 8px; }
+    .finder-foot button.danger { background: #3a2224; color: #ff6b7a; }
+    #previewImg { max-width: 100%; max-height: 140px; display: none; margin-top: 8px; border-radius: 8px; }
+    .ctx {
+      display: none; position: fixed; z-index: 50; min-width: 160px;
+      background: #2c2c2e; border: 1px solid #3a3a3c; border-radius: 10px;
+      padding: 6px; box-shadow: 0 12px 40px rgba(0,0,0,.45);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .ctx div { padding: 7px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; color: #eee; }
+    .ctx div:hover { background: #0a84ff; }
+    .ctx .sep { height: 1px; background: #3a3a3c; margin: 4px 8px; padding: 0; }
+    .finder.drop { outline: 2px dashed #0a84ff; }
   </style>
 </head>
 <body>
+  <div class="adbar">
+    <div class="adbar-label">ADVERTISEMENT</div>
+    <a href="https://aads.com/advertise/?partner=2457539" target="_blank" rel="noopener noreferrer">
+      <img src="https://aads.com/a_ads_banners/gif/english/320x100/simple_v1.gif" alt="Advertise with Anonymous Ads" width="320" height="100" />
+    </a>
+    <a class="adbar-link" href="https://aads.com/advertise/?partner=2457539" target="_blank" rel="noopener noreferrer">Get ads on this site</a>
+  </div>
   <div id="lock">
     <div class="box">
       <h2>AXION // ACCESS</h2>
@@ -167,7 +224,7 @@
         </div>
       </div>
       <div id="p-files" class="panel hidden" style="padding:0;background:transparent;border:0">
-        <div class="finder">
+        <div class="finder" id="finder">
           <div class="finder-bar">
             <div class="dots"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
             <button class="navbtn" id="btnBack" onclick="fsBack()">‹</button>
@@ -178,20 +235,28 @@
           <div class="finder-body">
             <div class="finder-side" id="driveList"></div>
             <div class="finder-main">
-              <div class="finder-cols"><span>Name</span><span>Size</span><span>Date Modified</span></div>
-              <div id="fileList"></div>
-              <div class="finder-preview" id="preview"></div>
-              <img id="previewImg" alt="" />
+              <div class="colstrip" id="colstrip"></div>
             </div>
           </div>
           <div class="finder-foot">
             <span id="curPath">Select a drive</span>
             <span style="flex:1"></span>
-            <input id="upFile" type="file" style="width:auto;margin:0;padding:0;border:0;background:transparent;color:#ccc" />
+            <button type="button" onclick="newFolder()">New folder</button>
+            <button type="button" onclick="renameSelected()">Rename</button>
+            <button type="button" class="danger" onclick="deleteSelected()">Delete</button>
+            <input id="upFile" type="file" multiple style="width:auto;margin:0;padding:0;border:0;background:transparent;color:#ccc" />
             <button type="button" onclick="uploadFile()">Upload</button>
-            <button type="button" id="btnOpen" onclick="openSelected()">Open</button>
-            <button type="button" id="btnDl" onclick="downloadSelected()">Download</button>
+            <button type="button" onclick="downloadSelected()">Download</button>
           </div>
+        </div>
+        <div class="ctx" id="ctx">
+          <div data-act="open">Open</div>
+          <div data-act="preview">Quick Look</div>
+          <div data-act="download">Download</div>
+          <div class="sep"></div>
+          <div data-act="rename">Rename</div>
+          <div data-act="new">New Folder</div>
+          <div data-act="delete">Move to Trash</div>
         </div>
       </div>
       <div id="p-ports" class="panel hidden">
