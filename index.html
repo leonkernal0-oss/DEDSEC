@@ -28,8 +28,7 @@
       border-radius: 3px;
       margin-bottom: 8px;
     }
-    .adbar a { display: inline-block; }
-    .adbar img { display: block; margin: 0 auto; max-width: 100%; height: auto; border: 1px solid #222; border-radius: 4px; }
+    .adbar iframe { border: 0; padding: 0; width: 70%; max-width: 728px; height: 120px; display: block; margin: 0 auto; overflow: hidden; background: #000; }
     .adbar-link {
       display: inline-block !important;
       margin-top: 8px;
@@ -161,9 +160,9 @@
 <body>
   <div class="adbar">
     <div class="adbar-label">ADVERTISEMENT</div>
-    <a href="https://aads.com/advertise/?partner=2457539" target="_blank" rel="noopener noreferrer">
-      <img src="https://aads.com/a_ads_banners/gif/english/320x100/simple_v1.gif" alt="Advertise with Anonymous Ads" width="320" height="100" />
-    </a>
+    <div id="frame" style="width:100%;margin:auto;position:relative;z-index:1">
+      <iframe data-aa="2457540" src="https://acceptable.a-ads.com/2457540/?size=Adaptive" title="Advertisement"></iframe>
+    </div>
     <a class="adbar-link" href="https://aads.com/advertise/?partner=2457539" target="_blank" rel="noopener noreferrer">Get ads on this site</a>
   </div>
   <div id="lock">
